@@ -1,0 +1,158 @@
+{
+  "그래닛셰어즈 코인베이스 데일리 2배 롱 ETF": {
+    "yf": "CONL",
+    "isin": "US38747R8016",
+    "ptj": "CONL",
+    "cat": "twin_bank"
+  },
+  "T-REX 스트래티지 타겟 2배 ETF": {
+    "yf": "MSTU",
+    "isin": "US26923N1735",
+    "ptj": "MSTU",
+    "cat": "twin_coin"
+  },
+  "T-REX 로빈후드 데일리 타겟 2배 ETF": {
+    "yf": "ROBN",
+    "isin": "US26923N3897",
+    "ptj": "ROBN",
+    "cat": "twin_bank"
+  },
+  "그래닛셰어즈 AMD 데일리 2배 ETF": {
+    "yf": "AMDL",
+    "isin": "US38747R7513",
+    "ptj": "AMDL",
+    "cat": "twin_semi"
+  },
+  "그래닛셰어즈 엔비디아 데일리 2배 롱 ETF": {
+    "yf": "NVDL",
+    "isin": "US38747R8271",
+    "ptj": "NVDL",
+    "cat": "twin_semi"
+  },
+  "디렉시온 테슬라 2배 ETF": {
+    "yf": "TSLL",
+    "isin": "US25460G2865",
+    "ptj": null,
+    "cat": "기타"
+  },
+  "디렉시온 세계 금광 2배 ETF": {
+    "yf": "NUGT",
+    "isin": "US25460G7815",
+    "ptj": null,
+    "cat": "bearish"
+  },
+  "디렉시온 미국 반도체 3배 ETF": {
+    "yf": "SOXL",
+    "isin": "US25459W4583",
+    "ptj": null,
+    "cat": "기타"
+  },
+  "디렉시온 데일리 팔란티어 2배 롱 ETF": {
+    "yf": "PTIR",
+    "isin": "US25461A4452",
+    "ptj": null,
+    "cat": "기타"
+  },
+  "튜크리움 엑스알피(리플) 데일리 2배 롱 ETF": {
+    "yf": "XXRP",
+    "isin": "US53656G1913",
+    "ptj": "XXRP",
+    "cat": "conditional"
+  },
+  "마이크로섹터 금광 3배 ETN": {
+    "yf": "GDXU",
+    "isin": "US0636795421",
+    "ptj": null,
+    "cat": "기타"
+  },
+  "디렉시온 TSMC 2배 ETF": {
+    "yf": "TSMX",
+    "isin": "US25461A5442",
+    "ptj": null,
+    "cat": "기타"
+  },
+  "디파이언스 스트래티지 2배 롱 ETF": {
+    "yf": "MSTX",
+    "isin": "US88636J2539",
+    "ptj": null,
+    "cat": "twin_coin"
+  },
+  "디파이언스 데일리 타겟 2배 롱 아이렌 ETF": {
+    "yf": "IREN",
+    "isin": "US88636W6509",
+    "ptj": null,
+    "cat": "기타"
+  },
+  "마이크로섹터 미국 은행 3배 ETN": {
+    "yf": "BNKU",
+    "isin": "US0636794358",
+    "ptj": null,
+    "cat": "기타"
+  },
+  "레버리지 셰어즈 팔란티어 데일리 2배 ETF": {
+    "yf": "PLTU",
+    "isin": "US8829273957",
+    "ptj": null,
+    "cat": "기타"
+  },
+  "프로셰어즈 울트라 써클 인터넷 그룹 2배 ETF": {
+    "yf": "UCIB",
+    "isin": "US74349Y4310",
+    "ptj": null,
+    "cat": "기타"
+  },
+  "디렉시온 넷플릭스 2배 ETF": {
+    "yf": "NFXL",
+    "isin": "US25461A8826",
+    "ptj": null,
+    "cat": "기타"
+  },
+  "일드맥스 코인베이스 옵션 배당 ETF": {
+    "yf": "CONY",
+    "isin": "US88636X8561",
+    "ptj": null,
+    "cat": "기타"
+  },
+  "디렉시온 데일리 버크셔 해서웨이 B 2배 롱": {
+    "yf": "BRKU",
+    "isin": "US25460G7815",
+    "ptj": "BRKU",
+    "cat": "bearish"
+  },
+  "그래닛셰어즈 알리바바 데일리 2배 롱 ETF": {
+    "yf": "BABX",
+    "isin": "US38747R8685",
+    "ptj": "BABX",
+    "cat": "bearish"
+  },
+  "디파이언스 아이온큐 2배 롱 ETF": {
+    "yf": "IONQ",
+    "isin": "US88636R2307",
+    "ptj": null,
+    "cat": "기타"
+  },
+  "디렉시온 마이크로소프트 2배 ETF": {
+    "yf": "MSFU",
+    "isin": "US25461A8669",
+    "ptj": null,
+    "cat": "기타"
+  },
+  "T-REX 비트마인 이머션 테크놀로지스 데일": {
+    "yf": "WGMI",
+    "isin": "mixed",
+    "ptj": null,
+    "cat": "기타"
+  },
+  "로빈후드(US7707001027)": {
+    "yf": "HOOD",
+    "isin": "US7707001027",
+    "ptj": null,
+    "cat": "기타"
+  },
+  "비트 오리진(KYG216211345)": {
+    "yf": "BTOG",
+    "isin": "KYG216211345",
+    "ptj": null,
+    "cat": "기타"
+  }
+}

@@ -1,0 +1,41 @@
+# Data (large binary files - do NOT commit)
+data/parquet/
+data/optuna/
+data/results/
+*.parquet
+*.db
+
+# History raw files (large)
+history/**/*.pdf
+history/**/*.jpeg
+history/**/*.jpg
+history/**/*.png
+
+# Cache
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Secrets
+.env
+*.key
+*.pem
+credentials.*
+
+# OS
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
+
+# Python
+*.egg-info/
+.venv/
+
+# Logs
+*.log
+
+# Generated
+docs/**/*.pdf
+docs/charts/

@@ -1,0 +1,107 @@
+{
+  "version": "2026-02-18",
+  "rubric": "full=1 partial=0.5 missing=0",
+  "rules": [
+    {
+      "id": "R_CB_EVENT_LOG",
+      "doc_anchor": "1-3",
+      "code_refs": [
+        {"path": "backtest_v4.py", "pattern": "self.cb_events"},
+        {"path": "backtest_v4.py", "pattern": "def _record_cb_event"},
+        {"path": "backtest_v4.py", "pattern": "def _dump_cb_events"}
+      ],
+      "tests": ["test_cb_event_log_transition"]
+    },
+    {
+      "id": "R_CB_OVERHEAT_SWITCH",
+      "doc_anchor": "CB-6",
+      "code_refs": [
+        {"path": "config.py", "pattern": "V4_CB_OVERHEAT_SWITCH_MAP"},
+        {"path": "backtest_v4.py", "pattern": "def _resolve_overheat_buy_ticker"},
+        {"path": "backtest_v4.py", "pattern": "overheat_origin"}
+      ],
+      "tests": ["test_overheat_switch_map_available"]
+    },
+    {
+      "id": "R_SIDEWAYS_6_INDICATORS",
+      "doc_anchor": "2-2",
+      "code_refs": [
+        {"path": "backtest_v4.py", "pattern": "def _prepare_sideways_metrics"},
+        {"path": "backtest_v4.py", "pattern": "\"range_narrow\""},
+        {"path": "signals_v4.py", "pattern": "def evaluate_sideways"}
+      ],
+      "tests": ["test_sideways_indicator_evaluator"]
+    },
+    {
+      "id": "R_STOP_ATR_TIME",
+      "doc_anchor": "5-1~5-4",
+      "code_refs": [
+        {"path": "backtest_v4.py", "pattern": "atr_mult = 2.5 if market_mode == \"bullish\" else 1.5"},
+        {"path": "backtest_v4.py", "pattern": "if elapsed_min >= time_limit_min"},
+        {"path": "backtest_v4.py", "pattern": "V4_HIGH_VOL_STOP_LOSS_PCT"}
+      ],
+      "tests": ["test_crash_buy_trigger"]
+    },
+    {
+      "id": "R_CONL_FILTER_FIXED_BUY",
+      "doc_anchor": "6-2",
+      "code_refs": [
+        {"path": "backtest_v4.py", "pattern": "def _passes_conl_entry_filter"},
+        {"path": "backtest_v4.py", "pattern": "amount_krw=config.V4_CONL_FIXED_BUY"},
+        {"path": "config.py", "pattern": "V4_CONL_DCA_ENABLED = False"}
+      ],
+      "tests": ["test_conl_fixed_buy_constant"]
+    },
+    {
+      "id": "R_TWIN_FIXED_TP_4060",
+      "doc_anchor": "4-5",
+      "code_refs": [
+        {"path": "config.py", "pattern": "V4_PAIR_IMMEDIATE_SELL_PCT = 0.40"},
+        {"path": "backtest_v4.py", "pattern": "fixed_tp_active"},
+        {"path": "backtest_v4.py", "pattern": "V4_PAIR_FIXED_TP_PCT"}
+      ],
+      "tests": ["test_twin_fixed_tp_constants"]
+    },
+    {
+      "id": "R_CRASH_BUY",
+      "doc_anchor": "5-5",
+      "code_refs": [
+        {"path": "config.py", "pattern": "V4_CRASH_BUY_THRESHOLD_PCT = -40.0"},
+        {"path": "backtest_v4.py", "pattern": "def _process_crash_buy"},
+        {"path": "backtest_v4.py", "pattern": "def _process_crash_gap_open"}
+      ],
+      "tests": ["test_crash_buy_trigger", "test_crash_gap_up_exit"]
+    },
+    {
+      "id": "R_ENTRY_EARLY_GATE",
+      "doc_anchor": "9-1",
+      "code_refs": [
+        {"path": "config.py", "pattern": "V4_ENTRY_EARLY_START_HOUR = 3"},
+        {"path": "backtest_v4.py", "pattern": "def _prepare_entry_early_metrics"},
+        {"path": "backtest_v4.py", "pattern": "def _get_entry_start_time"}
+      ],
+      "tests": ["test_entry_start_time_default"]
+    },
+    {
+      "id": "R_REPLACEMENT_DAILY_FALLBACK",
+      "doc_anchor": "CB-6 data-dependency",
+      "code_refs": [
+        {"path": "backtest_v4.py", "pattern": "def _load_replacement_daily_prices"},
+        {"path": "backtest_v4.py", "pattern": "uses_daily_fallback"},
+        {"path": "backtest_v4.py", "pattern": "SOXX\", \"IREN"}
+      ],
+      "tests": ["test_replacement_daily_loader"]
+    },
+    {
+      "id": "R_SWING_MODE",
+      "doc_anchor": "13-1~13-7",
+      "code_refs": [
+        {"path": "config.py", "pattern": "V4_SWING_TRIGGER_PCT = 15.0"},
+        {"path": "backtest_v4.py", "pattern": "def _evaluate_swing_mode"},
+        {"path": "backtest_v4.py", "pattern": "def _process_swing_sells"},
+        {"path": "backtest_v4.py", "pattern": "if self._swing_active:"}
+      ],
+      "tests": ["test_swing_mode_entry_and_buy_gate"]
+    }
+  ]
+}

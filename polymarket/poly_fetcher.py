@@ -22,6 +22,7 @@ from polymarket.poly_config import (
     MarketType,
     SlugType,
 )
+from polymarket.poly_common import MONTH_NUM, fetch_event as _fetch_event
 
 logger = logging.getLogger(__name__)
 
@@ -41,13 +42,6 @@ def _format_price_label(value: float) -> str:
             return f"${int(k)}K"
         return f"${k:.1f}K"
     return f"${value:,.0f}"
-
-
-_MONTH_NUM = {
-    "january": 1, "february": 2, "march": 3, "april": 4,
-    "may": 5, "june": 6, "july": 7, "august": 8,
-    "september": 9, "october": 10, "november": 11, "december": 12,
-}
 
 
 # ------------------------------------------------------------------
@@ -107,27 +101,8 @@ def build_slug(name: str, indicator: dict, ref_date: datetime | None = None) -> 
 
 
 # ------------------------------------------------------------------
-# API 호출
+# API 호출 (_fetch_event는 poly_common에서 import)
 # ------------------------------------------------------------------
-
-def _fetch_event(slug: str) -> dict | None:
-    """Gamma API 에서 이벤트 1건을 조회한다."""
-    url = f"{GAMMA_API_BASE}/events"
-    try:
-        resp = requests.get(url, params={"slug": slug}, timeout=REQUEST_TIMEOUT)
-        resp.raise_for_status()
-        data = resp.json()
-        if not data:
-            logger.warning("Empty response for slug: %s", slug)
-            return None
-        return data[0]
-    except requests.RequestException as e:
-        logger.error("API request failed for slug %s: %s", slug, e)
-        return None
-    except (IndexError, KeyError, json.JSONDecodeError) as e:
-        logger.error("Failed to parse response for slug %s: %s", slug, e)
-        return None
-
 
 def _is_event_resolved(event: dict) -> bool:
     """이벤트가 이미 종료(resolved)되었는지 확인.
@@ -323,7 +298,7 @@ def _find_active_fomc_slug(template: str, ref_date: datetime) -> str | None:
     # 현재 월 이상인 첫 FOMC 월 인덱스 찾기
     start_idx = 0
     for i, month_name in enumerate(FOMC_MONTHS):
-        if _MONTH_NUM.get(month_name, 0) >= ref_date.month:
+        if MONTH_NUM.get(month_name, 0) >= ref_date.month:
             start_idx = i
             break
 

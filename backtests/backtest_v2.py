@@ -13,12 +13,19 @@ Dependencies:
   - config.py         : v2 parameters (TICKERS_V2, TWIN_PAIRS_V2, ...)
   - signals_v2.py     : pure signal functions
   - backtest_common.py: data loading, fee calculations, metrics
+  - backtest_base.py  : BacktestBase ABC
 """
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime, date, time, timedelta
+import sys
 from pathlib import Path
+
+_ROOT = Path(__file__).resolve().parent.parent
+for _p in [str(_ROOT), str(_ROOT / "strategies")]:
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
 
 import numpy as np
 import pandas as pd
@@ -26,6 +33,7 @@ import pandas as pd
 import config
 import signals_v2
 import backtest_common
+from backtest_base import BacktestBase
 
 # ============================================================
 # Constants
@@ -88,59 +96,223 @@ class TradeV2:
 # ============================================================
 # Backtest Engine v2
 # ============================================================
-class BacktestEngineV2:
+class BacktestEngineV2(BacktestBase):
     def __init__(
         self,
         initial_capital_usd: float = config.TOTAL_CAPITAL_USD,
         start_date: date = date(2025, 2, 18),
         end_date: date = date(2026, 2, 17),
         use_fees: bool = True,
+        params=None,
     ):
-        self.initial_capital_usd = initial_capital_usd
-        self.cash_usd = initial_capital_usd
-        self.start_date = start_date
-        self.end_date = end_date
-        self.use_fees = use_fees
-        self._verbose = False  # set by run()
+        # Backward compat: build params from config if not provided
+        if params is None:
+            from strategies.params import v2_params_from_config
+            params = v2_params_from_config()
 
-        # State
-        self.positions: dict[str, Position] = {}
-        self.trades: list[TradeV2] = []
-        self.equity_curve: list[tuple[date, float]] = []
-        self._sold_today: set[str] = set()
-        self._last_buy_time: dict[str, datetime] = {}
+        super().__init__(
+            params=params,
+            start_date=start_date,
+            end_date=end_date,
+            use_fees=use_fees,
+        )
 
-        # Fee accumulators (USD)
-        self.total_buy_fees_usd: float = 0.0
-        self.total_sell_fees_usd: float = 0.0
+    # Backward-compat aliases (v2 uses *_usd naming)
+    @property
+    def initial_capital_usd(self):
+        return self.initial_capital
 
-        # Statistics
-        self.total_trading_days: int = 0
-        self.skipped_gold_bars: int = 0  # bars where gold blocked buys
+    @property
+    def cash_usd(self):
+        return self.cash
+
+    @cash_usd.setter
+    def cash_usd(self, value):
+        self.cash = value
+
+    @property
+    def total_buy_fees_usd(self):
+        return self.total_buy_fees
+
+    @total_buy_fees_usd.setter
+    def total_buy_fees_usd(self, value):
+        self.total_buy_fees = value
+
+    @property
+    def total_sell_fees_usd(self):
+        return self.total_sell_fees
+
+    @total_sell_fees_usd.setter
+    def total_sell_fees_usd(self, value):
+        self.total_sell_fees = value
+
+    # ============================================================
+    # BacktestBase abstract method implementations
+    # ============================================================
+
+    def _version_label(self) -> str:
+        return "v2 USD"
+
+    def _init_version_state(self) -> None:
+        """v2는 추가 상태 없음."""
+        pass
+
+    def _load_extra_data(self, df: pd.DataFrame, poly: dict) -> None:
+        """v2는 추가 데이터 없음."""
+        pass
+
+    def _warmup_extra(self, warmup_dates: list, sym_bars: dict, prev_close: dict) -> None:
+        """v2는 추가 warmup 없음."""
+        pass
+
+    def _on_day_start(
+        self,
+        trading_date: date,
+        day_idx: int,
+        day_sym: dict,
+        day_ts: list,
+        poly_probs: dict | None,
+        prev_close: dict[str, float],
+    ) -> dict:
+        """일 시작 시 처리."""
+        market_mode = signals_v2.determine_market_mode(poly_probs)
+
+        if market_mode == "bullish":
+            stop_loss_threshold = config.STOP_LOSS_BULLISH_PCT
+        else:
+            stop_loss_threshold = config.STOP_LOSS_PCT
+
+        # Handle carry positions
+        self._handle_carry_positions(day_sym, day_ts, market_mode, prev_close)
+
+        # Clear daily state
+        self._sold_today.clear()
+
+        # Select coin follow
+        coin_follow = self._select_coin_follow(day_sym, trading_date)
+        today_pairs = {}
+        for pair_key, pair_cfg in config.TWIN_PAIRS_V2.items():
+            if pair_key == "coin":
+                today_pairs[pair_key] = {
+                    "lead": pair_cfg["lead"],
+                    "follow": [coin_follow],
+                    "label": f"코인 (BTC -> {coin_follow})",
+                }
+            else:
+                today_pairs[pair_key] = pair_cfg
+
+        return {
+            "market_mode": market_mode,
+            "stop_loss_threshold": stop_loss_threshold,
+            "poly_probs": poly_probs,
+            "today_pairs": today_pairs,
+        }
+
+    def _on_bar(
+        self,
+        ts: datetime,
+        cur_prices: dict[str, float],
+        changes: dict[str, dict],
+        day_ctx: dict,
+    ) -> None:
+        """1분봉 바 단위 처리."""
+        market_mode = day_ctx["market_mode"]
+        stop_loss_threshold = day_ctx["stop_loss_threshold"]
+        poly_probs = day_ctx["poly_probs"]
+        today_pairs = day_ctx["today_pairs"]
+
+        # Generate signals
+        sigs = signals_v2.generate_all_signals_v2(
+            changes,
+            poly_probs=poly_probs,
+            pairs=today_pairs,
+            coin_trigger_pct=config.COIN_TRIGGER_PCT,
+            coin_sell_profit_pct=config.COIN_SELL_PROFIT_PCT,
+            coin_sell_bearish_pct=config.COIN_SELL_BEARISH_PCT,
+            conl_trigger_pct=config.CONL_TRIGGER_PCT,
+            conl_sell_profit_pct=config.CONL_SELL_PROFIT_PCT,
+            conl_sell_avg_pct=config.CONL_SELL_AVG_PCT,
+        )
+
+        gold_warning = sigs["gold"]["warning"]
+
+        # SELL
+        self._process_sells(
+            cur_prices, changes, sigs, ts, market_mode,
+            stop_loss_threshold,
+        )
+
+        # BUY
+        self._process_buys(
+            cur_prices, changes, sigs, ts, market_mode,
+            gold_warning, today_pairs,
+        )
+
+    def _on_day_end(
+        self,
+        trading_date: date,
+        day_idx: int,
+        last_prices: dict[str, float],
+        last_ts: datetime | None,
+        prev_close: dict[str, float],
+        day_ctx: dict,
+    ) -> None:
+        """일 종료 시 처리."""
+        market_mode = day_ctx["market_mode"]
+
+        if market_mode == "bullish":
+            for ticker, pos in self.positions.items():
+                if not pos.carry:
+                    pos.carry = True
+        else:
+            for ticker in list(self.positions.keys()):
+                price = last_prices.get(ticker)
+                if price is not None:
+                    self._sell_all(ticker, price, last_ts, "eod_close")
+
+    def _snapshot_equity(self, cur_prices: dict[str, float]) -> float:
+        """v2 총 자산 (USD, no FX)."""
+        equity = self.cash
+        for ticker, pos in self.positions.items():
+            price = cur_prices.get(ticker)
+            if price is not None:
+                equity += pos.total_qty * price
+            else:
+                equity += pos.total_invested_usd
+        return equity
+
+    def _print_run_header(self) -> None:
+        print(f"  초기 자금: ${self.initial_capital:,.2f}\n")
+
+    def _print_day_progress(
+        self, day_idx: int, total_days: int, trading_date: date,
+        equity: float, day_ctx: dict,
+    ) -> None:
+        market_mode = day_ctx.get("market_mode", "?")
+        print(
+            f"  [{day_idx+1:>3}/{total_days}] {trading_date}  "
+            f"자산: ${equity:,.2f}  "
+            f"현금: ${self.cash:,.2f}  "
+            f"포지션: {len(self.positions)}개  "
+            f"모드: {market_mode}"
+        )
 
     # ----------------------------------------------------------
     # Conditional time check (KST 17:30)
     # ----------------------------------------------------------
     def _is_conditional_allowed(self, ts) -> bool:
-        """조건부 매매 허용 시각인지 확인한다 (한국시간 17:30 이후).
-
-        US 장중 시간은 KST 22:30~06:00 (자정을 넘김).
-        허용: 17:30~23:59, 00:00~06:59 (장중 전체)
-        차단: 07:00~17:29 (장 마감 후 ~ 오후)
-        """
         h, m = config.CONDITIONAL_START_KST
         try:
             kst = ts.tz_convert(KST_TZ)
             kst_time = (kst.hour, kst.minute)
             return kst_time >= (h, m) or kst_time < (7, 0)
         except Exception:
-            return True  # 변환 실패 시 허용
+            return True
 
     # ----------------------------------------------------------
-    # Net profit calculation (for sell decisions)
+    # Net profit calculation
     # ----------------------------------------------------------
     def _calc_net_profit_pct(self, pos: Position, cur_price: float) -> float:
-        """Calculate net profit % after fees."""
         gross_usd = pos.total_qty * cur_price
         if self.use_fees:
             sell_fee = backtest_common.calc_sell_fee(gross_usd)
@@ -152,94 +324,17 @@ class BacktestEngineV2:
         return (net_usd - pos.total_invested_usd) / pos.total_invested_usd * 100
 
     # ----------------------------------------------------------
-    # Buy eligibility check
+    # Buy eligibility
     # ----------------------------------------------------------
     def _can_buy(self, ticker: str, ts: datetime) -> bool:
-        """Check if we can open a new position on this ticker."""
         if ticker in self.positions:
-            return False  # already holding (DCA handled separately)
+            return False
         if ticker in self._sold_today:
-            return False  # no re-buy same day (rule 8.5)
+            return False
         last = self._last_buy_time.get(ticker)
         if last and (ts - last).total_seconds() < 300:
-            return False  # 5-min cooldown (rule 8.4)
+            return False
         return True
-
-    # ----------------------------------------------------------
-    # Market time elapsed (minutes)
-    # ----------------------------------------------------------
-    @staticmethod
-    def _market_minutes_elapsed(entry_time: datetime, current_time: datetime) -> float:
-        """Calculate elapsed market minutes between two timestamps."""
-        if current_time <= entry_time:
-            return 0.0
-
-        entry_date = entry_time.date()
-        current_date = current_time.date()
-
-        total_minutes = 0.0
-
-        d = entry_date
-        while d <= current_date:
-            day_open = datetime.combine(d, MARKET_OPEN)
-            day_close = datetime.combine(d, MARKET_CLOSE)
-
-            if hasattr(entry_time, 'tzinfo') and entry_time.tzinfo is not None:
-                day_open = day_open.replace(tzinfo=entry_time.tzinfo)
-                day_close = day_close.replace(tzinfo=entry_time.tzinfo)
-
-            if d == entry_date:
-                effective_start = max(entry_time, day_open)
-            else:
-                effective_start = day_open
-
-            if d == current_date:
-                effective_end = min(current_time, day_close)
-            else:
-                effective_end = day_close
-
-            if effective_end > effective_start:
-                total_minutes += (effective_end - effective_start).total_seconds() / 60
-
-            d += timedelta(days=1)
-
-        return total_minutes
-
-    # ----------------------------------------------------------
-    # Coin follow selection (MSTU vs IRE)
-    # ----------------------------------------------------------
-    def _select_coin_follow(self, sym_bars_day: dict[str, list[dict]], trading_date=None) -> str:
-        """Select MSTU or IRE for today based on volatility, then volume."""
-        candidates = ["MSTU", "IRE"]
-        stats: dict[str, dict] = {}
-
-        for ticker in candidates:
-            bars = sym_bars_day.get(ticker, [])[:30]
-            if not bars:
-                continue
-            open_price = bars[0]["open"]
-            if open_price <= 0:
-                continue
-            vol = (max(b["high"] for b in bars) - min(b["low"] for b in bars)) / open_price * 100
-            volume = sum(b["volume"] for b in bars)
-            stats[ticker] = {"volatility": vol, "volume": volume}
-
-        if len(stats) == 0:
-            if self._verbose:
-                d = trading_date if trading_date else "?"
-                print(f"    [WARN] MSTU/IRE 데이터 없음 ({d}), 기본 MSTU 선택")
-            return "MSTU"
-        if len(stats) == 1:
-            return list(stats.keys())[0]
-
-        mstu_vol = stats["MSTU"]["volatility"]
-        ire_vol = stats["IRE"]["volatility"]
-        diff = abs(mstu_vol - ire_vol)
-
-        if diff >= config.COIN_FOLLOW_VOLATILITY_GAP:
-            return "MSTU" if mstu_vol > ire_vol else "IRE"
-        else:
-            return "MSTU" if stats["MSTU"]["volume"] >= stats["IRE"]["volume"] else "IRE"
 
     # ----------------------------------------------------------
     # Buy execution
@@ -254,31 +349,27 @@ class BacktestEngineV2:
         is_conl_conditional: bool = False,
         is_coin_conditional: bool = False,
     ) -> None:
-        """Execute a buy order (USD)."""
         if price <= 0 or amount_usd <= 0:
             return
-        if amount_usd > self.cash_usd:
-            amount_usd = self.cash_usd
-        if amount_usd < 7:  # minimum ~$7
+        if amount_usd > self.cash:
+            amount_usd = self.cash
+        if amount_usd < 7:
             return
 
-        # Fee deduction on buy
         if self.use_fees:
             buy_fee = backtest_common.calc_buy_fee(amount_usd)
-            self.total_buy_fees_usd += buy_fee
+            self.total_buy_fees += buy_fee
         else:
             buy_fee = 0.0
 
         net_amount_usd = amount_usd - buy_fee
         qty = net_amount_usd / price
 
-        self.cash_usd -= amount_usd
+        self.cash -= amount_usd
 
-        # Create or update position
         entry = {"time": ts, "price": price, "qty": qty, "usd": amount_usd}
 
         if ticker in self.positions:
-            # DCA add
             pos = self.positions[ticker]
             pos.entries.append(entry)
             pos.total_qty += qty
@@ -305,7 +396,6 @@ class BacktestEngineV2:
 
         self._last_buy_time[ticker] = ts
 
-        # Record trade
         self.trades.append(TradeV2(
             date=ts.date() if isinstance(ts, (datetime, pd.Timestamp)) else ts,
             ticker=ticker,
@@ -322,7 +412,7 @@ class BacktestEngineV2:
         ))
 
     # ----------------------------------------------------------
-    # Sell execution (full or partial)
+    # Sell execution
     # ----------------------------------------------------------
     def _sell(
         self,
@@ -332,7 +422,6 @@ class BacktestEngineV2:
         ts: datetime,
         exit_reason: str,
     ) -> None:
-        """Execute a sell order for given quantity (USD)."""
         if ticker not in self.positions:
             return
 
@@ -341,30 +430,26 @@ class BacktestEngineV2:
         if sell_qty <= 0:
             return
 
-        # Calculate proceeds
         gross_usd = sell_qty * price
 
         if self.use_fees:
             sell_fee = backtest_common.calc_sell_fee(gross_usd)
-            self.total_sell_fees_usd += sell_fee
+            self.total_sell_fees += sell_fee
         else:
             sell_fee = 0.0
 
         net_proceeds_usd = gross_usd - sell_fee
 
-        # PnL: proportional cost basis
         fraction = sell_qty / pos.total_qty
         cost_usd = pos.total_invested_usd * fraction
         pnl_usd = net_proceeds_usd - cost_usd
         pnl_pct = (pnl_usd / cost_usd * 100) if cost_usd > 0 else 0.0
 
-        self.cash_usd += net_proceeds_usd
+        self.cash += net_proceeds_usd
 
-        # Update position
         pos.total_qty -= sell_qty
         pos.total_invested_usd -= cost_usd
 
-        # Record trade
         self.trades.append(TradeV2(
             date=ts.date() if isinstance(ts, (datetime, pd.Timestamp)) else ts,
             ticker=ticker,
@@ -384,38 +469,21 @@ class BacktestEngineV2:
 
         self._sold_today.add(ticker)
 
-        # Remove position if fully closed
         if pos.total_qty < 1e-9:
             del self.positions[ticker]
 
-    def _sell_all(
-        self,
-        ticker: str,
-        price: float,
-        ts: datetime,
-        exit_reason: str,
-    ) -> None:
-        """Sell entire position for a ticker."""
+    def _sell_all(self, ticker: str, price: float, ts: datetime, exit_reason: str) -> None:
         if ticker not in self.positions:
             return
         self._sell(ticker, self.positions[ticker].total_qty, price, ts, exit_reason)
 
-    def _partial_sell(
-        self,
-        ticker: str,
-        qty: float,
-        price: float,
-        ts: datetime,
-        exit_reason: str,
-    ) -> None:
-        """Sell a partial quantity."""
+    def _partial_sell(self, ticker: str, qty: float, price: float, ts: datetime, exit_reason: str) -> None:
         self._sell(ticker, qty, price, ts, exit_reason)
 
     # ----------------------------------------------------------
-    # Staged sell processing
+    # Staged sell
     # ----------------------------------------------------------
     def _process_staged_sell(self, pos: Position, price: float, ts: datetime) -> None:
-        """Process staged sell steps (30% of remaining every 5 min)."""
         if not pos.staged_sell_active:
             return
         if pos.staged_sell_start is None:
@@ -426,7 +494,7 @@ class BacktestEngineV2:
 
         while pos.staged_sell_step < expected_steps and pos.staged_sell_remaining > 0:
             sell_qty = pos.staged_sell_remaining * config.PAIR_SELL_REMAINING_PCT
-            if sell_qty < 0.001:  # minimum threshold
+            if sell_qty < 0.001:
                 sell_qty = pos.staged_sell_remaining
             self._partial_sell(pos.ticker, sell_qty, price, ts, "staged_sell")
             pos.staged_sell_remaining -= sell_qty
@@ -436,163 +504,16 @@ class BacktestEngineV2:
             pos.staged_sell_active = False
 
     # ----------------------------------------------------------
-    # Main loop
-    # ----------------------------------------------------------
-    def run(self, verbose: bool = True) -> "BacktestEngineV2":
-        """Execute the backtest."""
-        self._verbose = verbose
-        # ---- 1. Load data ----
-        print("[1/4] 데이터 준비")
-        df = backtest_common.load_parquet(config.DATA_DIR / "backtest_1min_v2.parquet")
-        poly = backtest_common.load_polymarket_daily(config.PROJECT_ROOT / "polymarket" / "history")
-
-        # Pre-index DataFrame for O(1) bar lookup
-        ts_prices, sym_bars, day_timestamps = backtest_common.preindex_dataframe(df)
-
-        # ---- 2. Prepare trading dates ----
-        all_dates = sorted(day_timestamps.keys())
-        bt_dates = [d for d in all_dates if self.start_date <= d <= self.end_date]
-        warmup_dates = [d for d in all_dates if d < self.start_date]
-
-        # Warmup: compute prev_close
-        prev_close: dict[str, float] = {}
-        for d in warmup_dates:
-            if d not in sym_bars:
-                continue
-            for ticker, bars in sym_bars[d].items():
-                if bars:
-                    prev_close[ticker] = bars[-1]["close"]
-
-        self.total_trading_days = len(bt_dates)
-        if verbose:
-            print(f"\n[2/4] 시뮬레이션 실행")
-            print(f"  백테스트 기간: {bt_dates[0]} ~ {bt_dates[-1]} ({len(bt_dates)}일)")
-            print(f"  초기 자금: ${self.initial_capital_usd:,.2f}\n")
-
-        # ---- 3. Main day loop ----
-        for day_idx, trading_date in enumerate(bt_dates):
-            if trading_date not in ts_prices:
-                continue
-
-            day_sym = sym_bars[trading_date]
-            day_ts = day_timestamps[trading_date]
-
-            # (a) Polymarket probs -> market mode
-            poly_probs = poly.get(trading_date, None)
-            market_mode = signals_v2.determine_market_mode(poly_probs)
-
-            # Determine stop loss threshold for this day
-            if market_mode == "bullish":
-                stop_loss_threshold = config.STOP_LOSS_BULLISH_PCT
-            else:
-                stop_loss_threshold = config.STOP_LOSS_PCT
-
-            # (b) Handle carry positions from previous day
-            self._handle_carry_positions(day_sym, day_ts, market_mode, prev_close)
-
-            # (c) Clear daily state
-            self._sold_today.clear()
-
-            # (d) Select coin follow for today
-            coin_follow = self._select_coin_follow(day_sym, trading_date)
-
-            # Build today's pairs dict with selected follow
-            today_pairs = {}
-            for pair_key, pair_cfg in config.TWIN_PAIRS_V2.items():
-                if pair_key == "coin":
-                    today_pairs[pair_key] = {
-                        "lead": pair_cfg["lead"],
-                        "follow": [coin_follow],
-                        "label": f"코인 (BTC -> {coin_follow})",
-                    }
-                else:
-                    today_pairs[pair_key] = pair_cfg
-
-            # (e) Process each 1-min bar (O(1) dict lookup per bar)
-            for ts in day_ts:
-                # O(1) dict lookup replaces DataFrame filter + iterrows
-                cur_prices = ts_prices[trading_date].get(ts, {})
-
-                # Changes from prev_close
-                changes = backtest_common.calc_changes(cur_prices, prev_close)
-
-                # Generate signals
-                sigs = signals_v2.generate_all_signals_v2(
-                    changes,
-                    poly_probs=poly_probs,
-                    pairs=today_pairs,
-                    coin_trigger_pct=config.COIN_TRIGGER_PCT,
-                    coin_sell_profit_pct=config.COIN_SELL_PROFIT_PCT,
-                    coin_sell_bearish_pct=config.COIN_SELL_BEARISH_PCT,
-                    conl_trigger_pct=config.CONL_TRIGGER_PCT,
-                    conl_sell_profit_pct=config.CONL_SELL_PROFIT_PCT,
-                    conl_sell_avg_pct=config.CONL_SELL_AVG_PCT,
-                )
-
-                gold_warning = sigs["gold"]["warning"]
-
-                # ========== SELL PRIORITY ==========
-                self._process_sells(
-                    cur_prices, changes, sigs, ts, market_mode,
-                    stop_loss_threshold,
-                )
-
-                # ========== BUY ==========
-                self._process_buys(
-                    cur_prices, changes, sigs, ts, market_mode,
-                    gold_warning, today_pairs,
-                )
-
-            # (f) End of day processing
-            last_prices = {sym: bars[-1]["close"] for sym, bars in day_sym.items() if bars}
-            last_ts = day_ts[-1] if day_ts else None
-
-            if market_mode == "bullish":
-                # Mark remaining positions as carry (hold to next day)
-                for ticker, pos in self.positions.items():
-                    if not pos.carry:
-                        pos.carry = True
-            else:
-                # Close all remaining positions (normal/bearish mode)
-                for ticker in list(self.positions.keys()):
-                    price = last_prices.get(ticker)
-                    if price is not None:
-                        self._sell_all(ticker, price, last_ts, "eod_close")
-
-            # Update prev_close
-            prev_close.update(last_prices)
-
-            # Record equity
-            equity = self._calc_total_equity(cur_prices if last_prices else prev_close)
-            self.equity_curve.append((trading_date, equity))
-
-            # Progress output
-            if verbose and ((day_idx + 1) % 50 == 0 or day_idx == len(bt_dates) - 1):
-                print(
-                    f"  [{day_idx+1:>3}/{len(bt_dates)}] {trading_date}  "
-                    f"자산: ${equity:,.2f}  "
-                    f"현금: ${self.cash_usd:,.2f}  "
-                    f"포지션: {len(self.positions)}개  "
-                    f"모드: {market_mode}"
-                )
-
-        if verbose:
-            print("\n  백테스트 완료!")
-        return self
-
-    # ----------------------------------------------------------
-    # Carry position handling (bullish mode next-day)
+    # Carry position handling
     # ----------------------------------------------------------
     def _handle_carry_positions(
         self, sym_bars_day: dict[str, list[dict]], day_ts: list,
         market_mode: str,
         prev_close: dict[str, float] | None = None,
     ) -> None:
-        """Handle carry positions from previous day."""
         if not any(pos.carry for pos in self.positions.values()):
             return
 
-        # Get first available prices of the day
         first_prices: dict[str, float] = {}
         for ticker in list(self.positions.keys()):
             bars = sym_bars_day.get(ticker, [])
@@ -614,13 +535,11 @@ class BacktestEngineV2:
                 pos.carry = False
                 continue
 
-            # Check if +2% net profit -> sell immediately
             net_pnl_pct = self._calc_net_profit_pct(pos, price)
             if net_pnl_pct >= config.TAKE_PROFIT_PCT:
                 self._sell_all(ticker, price, first_ts, "carry_sell")
                 continue
 
-            # Check if 양전 AND has net profit -> sell
             prev_price = (prev_close or {}).get(ticker)
             is_positive_from_prev = False
             if prev_price and prev_price > 0:
@@ -643,8 +562,7 @@ class BacktestEngineV2:
         market_mode: str,
         stop_loss_threshold: float,
     ) -> None:
-        """Process all sell signals in priority order."""
-        # 1. Stop loss check
+        # 1. Stop loss
         for ticker in list(self.positions.keys()):
             pos = self.positions.get(ticker)
             if pos is None:
@@ -659,7 +577,7 @@ class BacktestEngineV2:
             if change_pct <= stop_loss_threshold:
                 self._sell_all(ticker, price, ts, "stop_loss")
 
-        # 2. Time stop: holding > 5 hours (market hours)
+        # 2. Time stop
         for ticker in list(self.positions.keys()):
             pos = self.positions.get(ticker)
             if pos is None:
@@ -679,7 +597,7 @@ class BacktestEngineV2:
                 else:
                     self._sell_all(ticker, price, ts, "time_stop")
 
-        # 3. CONL sell (조건부: KST 17:30 이후만)
+        # 3. CONL sell (KST 17:30 이후만)
         if self._is_conditional_allowed(ts):
             for ticker in list(self.positions.keys()):
                 pos = self.positions.get(ticker)
@@ -699,7 +617,7 @@ class BacktestEngineV2:
                 if conl_sig.get("sell_on_avg_drop", False):
                     self._sell_all(ticker, price, ts, "conl_avg_drop")
 
-        # 4. COIN sell (조건부: KST 17:30 이후만)
+        # 4. COIN sell (KST 17:30 이후만)
         if self._is_conditional_allowed(ts):
             for ticker in list(self.positions.keys()):
                 pos = self.positions.get(ticker)
@@ -718,7 +636,7 @@ class BacktestEngineV2:
                     if net_pnl_pct >= config.COIN_SELL_PROFIT_PCT:
                         self._sell_all(ticker, price, ts, "coin_profit")
 
-        # 5. Staged sell (ongoing)
+        # 5. Staged sell
         for ticker in list(self.positions.keys()):
             pos = self.positions.get(ticker)
             if pos is None or not pos.staged_sell_active:
@@ -728,7 +646,7 @@ class BacktestEngineV2:
                 continue
             self._process_staged_sell(pos, price, ts)
 
-        # 6. Twin SELL signal: gap <= 0.9% -> staged sell
+        # 6. Twin SELL
         for pair_sig in sigs.get("twin_pairs", []):
             follow = pair_sig["follow"]
             signal = pair_sig["signal"]
@@ -746,10 +664,7 @@ class BacktestEngineV2:
             if price is None:
                 continue
 
-            # Start staged sell: sell 80% immediately, activate staged for rest
             first_sell_qty = pos.total_qty * config.PAIR_SELL_FIRST_PCT
-            remaining_qty = pos.total_qty - first_sell_qty
-
             self._partial_sell(follow, first_sell_qty, price, ts, "twin_converge")
 
             if follow in self.positions:
@@ -772,13 +687,11 @@ class BacktestEngineV2:
         gold_warning: bool,
         today_pairs: dict,
     ) -> None:
-        """Process all buy signals."""
-        # 7. GLD positive -> block non-conditional buys
         gld_blocks_non_conditional = gold_warning
         if gld_blocks_non_conditional:
             self.skipped_gold_bars += 1
 
-        # 8. Twin ENTRY: gap >= 1.5% (blocked by GLD)
+        # Twin ENTRY
         if not gld_blocks_non_conditional:
             for pair_sig in sigs.get("twin_pairs", []):
                 follow = pair_sig["follow"]
@@ -797,7 +710,7 @@ class BacktestEngineV2:
                     amount_usd=config.INITIAL_BUY_USD,
                 )
 
-        # 9. DCA check for existing positions
+        # DCA
         for ticker in list(self.positions.keys()):
             pos = self.positions.get(ticker)
             if pos is None:
@@ -834,7 +747,7 @@ class BacktestEngineV2:
                     is_coin_conditional=pos.is_coin_conditional,
                 )
 
-        # 10. CONL buy (조건부: KST 17:30 이후만)
+        # CONL buy (KST 17:30 이후만)
         if self._is_conditional_allowed(ts):
             conl_sig = sigs.get("conditional_conl", {})
             if conl_sig.get("buy_signal", False):
@@ -847,7 +760,7 @@ class BacktestEngineV2:
                             is_conl_conditional=True,
                         )
 
-        # 11. COIN buy (조건부: KST 17:30 이후만)
+        # COIN buy (KST 17:30 이후만)
         if self._is_conditional_allowed(ts):
             coin_sig = sigs.get("conditional_coin", {})
             if coin_sig.get("buy_signal", False):
@@ -861,14 +774,14 @@ class BacktestEngineV2:
                             is_coin_conditional=True,
                         )
 
-        # 12. Bearish: if mode == "bearish" and BRKU not held -> buy BRKU at 10%
+        # Bearish
         if market_mode == "bearish":
             bearish_sig = sigs.get("bearish", {})
             if bearish_sig.get("buy_brku", False):
                 if self._can_buy("BRKU", ts):
                     price = cur_prices.get("BRKU")
                     if price is not None:
-                        brku_amount = self.initial_capital_usd * config.BRKU_WEIGHT_PCT / 100
+                        brku_amount = self.initial_capital * config.BRKU_WEIGHT_PCT / 100
                         self._buy(
                             "BRKU", price, ts, "bearish",
                             amount_usd=brku_amount,
@@ -878,27 +791,18 @@ class BacktestEngineV2:
     # Helpers
     # ----------------------------------------------------------
     def _calc_total_equity(self, cur_prices: dict[str, float]) -> float:
-        """Calculate total equity = cash + position values (USD)."""
-        equity = self.cash_usd
-        for ticker, pos in self.positions.items():
-            price = cur_prices.get(ticker)
-            if price is not None:
-                equity += pos.total_qty * price
-            else:
-                equity += pos.total_invested_usd
-        return equity
+        return self._snapshot_equity(cur_prices)
 
     # ----------------------------------------------------------
     # Report
     # ----------------------------------------------------------
     def print_report(self) -> None:
-        """Print console summary report."""
         if not self.equity_curve:
             print("  데이터 없음")
             return
 
         final = self.equity_curve[-1][1]
-        total_ret = (final - self.initial_capital_usd) / self.initial_capital_usd * 100
+        total_ret = (final - self.initial_capital) / self.initial_capital * 100
 
         sells = [t for t in self.trades if t.side == "SELL"]
         wins = [t for t in sells if t.pnl_usd > 0]
@@ -906,11 +810,10 @@ class BacktestEngineV2:
         breakeven = [t for t in sells if t.pnl_usd == 0]
         total_pnl = sum(t.pnl_usd for t in sells)
 
-        mdd = backtest_common.calc_mdd(self.equity_curve)
-        sharpe = backtest_common.calc_sharpe(self.equity_curve)
-        total_fees = self.total_buy_fees_usd + self.total_sell_fees_usd
+        mdd = self.calc_mdd()
+        sharpe = self.calc_sharpe()
+        total_fees = self.total_buy_fees + self.total_sell_fees
 
-        # Exit reason breakdown
         exit_stats: dict[str, dict] = {}
         for t in sells:
             key = t.exit_reason or "unknown"
@@ -921,7 +824,6 @@ class BacktestEngineV2:
             if t.pnl_usd > 0:
                 exit_stats[key]["wins"] += 1
 
-        # Signal-type P&L
         sig_stats: dict[str, dict] = {}
         for t in sells:
             key = t.signal_type
@@ -932,7 +834,6 @@ class BacktestEngineV2:
             if t.pnl_usd > 0:
                 sig_stats[key]["wins"] += 1
 
-        # DCA statistics
         buys = [t for t in self.trades if t.side == "BUY"]
         dca_buys = [t for t in buys if t.dca_level > 0]
         initial_buys = [t for t in buys if t.dca_level == 0]
@@ -943,7 +844,7 @@ class BacktestEngineV2:
         print("=" * 65)
         print(f"  기간         : {self.equity_curve[0][0]} ~ {self.equity_curve[-1][0]}")
         print(f"  거래일       : {self.total_trading_days}일")
-        print(f"  초기 자금    : ${self.initial_capital_usd:>12,.2f}")
+        print(f"  초기 자금    : ${self.initial_capital:>12,.2f}")
         print(f"  최종 자산    : ${final:>12,.2f}")
         print(f"  총 수익률    : {total_ret:>+.2f}%")
         print(f"  총 손익      : ${total_pnl:>+12,.2f}")
@@ -960,14 +861,12 @@ class BacktestEngineV2:
         print(f"  평균 손실    : ${avg_loss:>+12,.2f}")
         print("-" * 65)
 
-        # Fee breakdown
         print("  [수수료]")
-        print(f"    매수 수수료 : ${self.total_buy_fees_usd:>10,.2f}")
-        print(f"    매도 수수료 : ${self.total_sell_fees_usd:>10,.2f}")
+        print(f"    매수 수수료 : ${self.total_buy_fees:>10,.2f}")
+        print(f"    매도 수수료 : ${self.total_sell_fees:>10,.2f}")
         print(f"    총 수수료   : ${total_fees:>10,.2f}")
         print("-" * 65)
 
-        # DCA statistics
         print("  [DCA 통계]")
         print(f"    초기 진입   : {len(initial_buys)}회")
         print(f"    물타기      : {len(dca_buys)}회")
@@ -978,7 +877,6 @@ class BacktestEngineV2:
             print(f"    DCA 총 투입 : ${total_dca_usd:>10,.2f}")
         print("-" * 65)
 
-        # Exit reason breakdown
         if exit_stats:
             print("  [매도 사유별 성과]")
             for key in sorted(exit_stats.keys()):
@@ -990,7 +888,6 @@ class BacktestEngineV2:
                 )
         print("-" * 65)
 
-        # Signal-type P&L
         if sig_stats:
             print("  [시그널별 성과]")
             for key in sorted(sig_stats.keys()):
@@ -1006,7 +903,6 @@ class BacktestEngineV2:
     # Save trade log CSV
     # ----------------------------------------------------------
     def save_trade_log(self) -> Path | None:
-        """Save all trades to CSV."""
         if not self.trades:
             return None
 
@@ -1031,10 +927,31 @@ class BacktestEngineV2:
             })
 
         out_df = pd.DataFrame(rows)
-        out_path = config.DATA_DIR / "backtest_v2_trades.csv"
+        out_path = config.RESULTS_DIR / "backtests" / "backtest_v2_trades.csv"
         out_df.to_csv(out_path, index=False)
         print(f"  거래 로그: {out_path}")
         return out_path
+
+
+# ============================================================
+# Convenience wrapper
+# ============================================================
+def run_backtest_v2(
+    params=None,
+    start_date: date = date(2025, 2, 18),
+    end_date: date = date(2026, 2, 17),
+    use_fees: bool = True,
+    verbose: bool = True,
+) -> BacktestEngineV2:
+    """v2 백테스트를 실행하고 엔진을 반환한다."""
+    engine = BacktestEngineV2(
+        start_date=start_date,
+        end_date=end_date,
+        use_fees=use_fees,
+        params=params,
+    )
+    engine.run(verbose=verbose)
+    return engine
 
 
 # ============================================================

@@ -6,19 +6,30 @@ Alpaca 5분봉 데이터 기반, 실제 매매 규칙을 적용한 1년간 시�
 """
 from __future__ import annotations
 
-import os
 import sys
 from dataclasses import dataclass, field
 from datetime import datetime, date, time, timedelta
 from pathlib import Path
 
+_ROOT = Path(__file__).resolve().parent.parent
+for _p in [str(_ROOT), str(_ROOT / "strategies")]:
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
+
 import numpy as np
 import pandas as pd
-from dotenv import load_dotenv
 
 import config
 import signals
 import backtest_common
+
+from fetchers.alpaca_fetcher import fetch_5min_v1, fetch_1min_v1, fetch_1min_v2
+from fetchers.fx_fetcher import fetch_usdkrw_hourly
+
+# 하위 호환 alias (optimizer들이 import하므로 필수)
+fetch_backtest_data = fetch_5min_v1
+fetch_1min_data = fetch_1min_v1
+fetch_1min_data_v2 = fetch_1min_v2
 
 # ============================================================
 # Constants
@@ -34,290 +45,6 @@ ALLOC_BEAR = 0.10     # 하락장 방어주 10%
 KIS_COMMISSION_PCT = 0.25    # 매매 수수료 0.25% (매수/매도 각각)
 KIS_SEC_FEE_PCT = 0.00278   # SEC Fee 0.00278% (매도 시에만)
 KIS_FX_SPREAD_PCT = 0.10    # 환전 스프레드 약 0.1% (편도)
-
-
-# ============================================================
-# Data Fetching (Alpaca)
-# ============================================================
-def fetch_backtest_data(
-    start_date: date,
-    end_date: date,
-    use_cache: bool = True,
-) -> pd.DataFrame:
-    """Alpaca에서 5분봉 데이터 수집. parquet 캐시 지원."""
-    cache_path = config.DATA_DIR / "backtest_5min.parquet"
-
-    if use_cache and cache_path.exists():
-        df = pd.read_parquet(cache_path)
-        print(f"  캐시 로드: {len(df):,} rows ({cache_path.name})")
-        return df
-
-    from alpaca.data.historical import StockHistoricalDataClient
-    from alpaca.data.requests import StockBarsRequest
-    from alpaca.data.timeframe import TimeFrame, TimeFrameUnit
-
-    load_dotenv(config.PROJECT_ROOT / ".env")
-    client = StockHistoricalDataClient(
-        api_key=os.getenv("ALPACA_API_KEY"),
-        secret_key=os.getenv("ALPACA_SECRET_KEY"),
-    )
-
-    tickers = list(config.TICKERS.keys())
-    print(f"  Alpaca에서 {len(tickers)}개 종목 5분봉 수집 중...")
-
-    request = StockBarsRequest(
-        symbol_or_symbols=tickers,
-        timeframe=TimeFrame(5, TimeFrameUnit.Minute),
-        start=datetime.combine(start_date, time()),
-        end=datetime.combine(end_date, time()),
-    )
-
-    bars = client.get_stock_bars(request)
-    df = bars.df.reset_index()
-
-    # UTC → US/Eastern 변환
-    df["timestamp"] = pd.to_datetime(df["timestamp"]).dt.tz_convert("US/Eastern")
-
-    # 정규장만 필터 (9:30 ~ 16:00 ET)
-    t = df["timestamp"].dt.time
-    df = df[(t >= MARKET_OPEN) & (t < MARKET_CLOSE)].copy()
-
-    df["date"] = df["timestamp"].dt.date
-    df = df.sort_values(["date", "symbol", "timestamp"]).reset_index(drop=True)
-
-    df.to_parquet(cache_path, index=False)
-    print(f"  수집 완료: {len(df):,} rows → {cache_path.name}")
-    return df
-
-
-def fetch_1min_data(
-    start_date: date = date(2025, 1, 3),
-    end_date: date = date(2026, 2, 17),
-    use_cache: bool = True,
-) -> pd.DataFrame:
-    """Alpaca에서 1분봉 데이터 수집. 월 단위 chunking + parquet 캐시."""
-    cache_path = config.DATA_DIR / "backtest_1min.parquet"
-
-    if use_cache and cache_path.exists():
-        df = pd.read_parquet(cache_path)
-        print(f"  캐시 로드: {len(df):,} rows ({cache_path.name})")
-        return df
-
-    from alpaca.data.historical import StockHistoricalDataClient
-    from alpaca.data.requests import StockBarsRequest
-    from alpaca.data.timeframe import TimeFrame, TimeFrameUnit
-
-    load_dotenv(config.PROJECT_ROOT / ".env")
-    client = StockHistoricalDataClient(
-        api_key=os.getenv("ALPACA_API_KEY"),
-        secret_key=os.getenv("ALPACA_SECRET_KEY"),
-    )
-
-    tickers = list(config.TICKERS.keys())
-    print(f"  Alpaca에서 {len(tickers)}개 종목 1분봉 수집 중...")
-    print(f"  기간: {start_date} ~ {end_date}")
-
-    # 월 단위 chunking (API 제한 대응)
-    chunks: list[pd.DataFrame] = []
-    chunk_start = start_date
-    while chunk_start <= end_date:
-        # 청크 끝: 해당 월 말일 또는 end_date 중 빠른 쪽
-        if chunk_start.month == 12:
-            next_month = date(chunk_start.year + 1, 1, 1)
-        else:
-            next_month = date(chunk_start.year, chunk_start.month + 1, 1)
-        chunk_end = min(next_month - timedelta(days=1), end_date)
-
-        label = f"{chunk_start.strftime('%Y-%m')}"
-        print(f"    [{label}] {chunk_start} ~ {chunk_end} ...", end=" ", flush=True)
-
-        try:
-            request = StockBarsRequest(
-                symbol_or_symbols=tickers,
-                timeframe=TimeFrame(1, TimeFrameUnit.Minute),
-                start=datetime.combine(chunk_start, time()),
-                end=datetime.combine(chunk_end + timedelta(days=1), time()),
-            )
-
-            bars = client.get_stock_bars(request)
-            chunk_df = bars.df.reset_index()
-            print(f"{len(chunk_df):,} rows")
-            chunks.append(chunk_df)
-        except Exception as e:
-            print(f"SKIP ({e})")
-
-        chunk_start = next_month
-
-    df = pd.concat(chunks, ignore_index=True)
-    print(f"  총 수집: {len(df):,} rows")
-
-    # UTC → US/Eastern 변환
-    df["timestamp"] = pd.to_datetime(df["timestamp"]).dt.tz_convert("US/Eastern")
-
-    # 정규장만 필터 (9:30 ~ 16:00 ET)
-    t = df["timestamp"].dt.time
-    df = df[(t >= MARKET_OPEN) & (t < MARKET_CLOSE)].copy()
-
-    df["date"] = df["timestamp"].dt.date
-    df = df.sort_values(["date", "symbol", "timestamp"]).reset_index(drop=True)
-
-    df.to_parquet(cache_path, index=False)
-    print(f"  필터 후: {len(df):,} rows → {cache_path.name}")
-    return df
-
-
-def fetch_1min_data_v2(
-    start_date: date = date(2025, 1, 3),
-    end_date: date = date(2026, 2, 17),
-    use_cache: bool = True,
-) -> pd.DataFrame:
-    """Alpaca에서 v2 종목 1분봉 데이터 수집. 월 단위 chunking + parquet 캐시.
-
-    v1 대비 변경:
-    - AMDL 제거, SOXL/IRE(IREN) 추가, HIMZ 제거
-    - PTJ 티커 ↔ Alpaca 티커 자동 매핑 (IRE ↔ IREN)
-    """
-    cache_path = config.DATA_DIR / "backtest_1min_v2.parquet"
-
-    if use_cache and cache_path.exists():
-        df = pd.read_parquet(cache_path)
-        print(f"  [v2] 캐시 로드: {len(df):,} rows ({cache_path.name})")
-        return df
-
-    from alpaca.data.historical import StockHistoricalDataClient
-    from alpaca.data.requests import StockBarsRequest
-    from alpaca.data.timeframe import TimeFrame, TimeFrameUnit
-
-    load_dotenv(config.PROJECT_ROOT / ".env")
-    client = StockHistoricalDataClient(
-        api_key=os.getenv("ALPACA_API_KEY"),
-        secret_key=os.getenv("ALPACA_SECRET_KEY"),
-    )
-
-    # PTJ 티커 → Alpaca 티커 변환
-    ptj_tickers = list(config.TICKERS_V2.keys())
-    alpaca_tickers = [config.ALPACA_TICKER_MAP.get(t, t) for t in ptj_tickers]
-
-    print(f"  [v2] Alpaca에서 {len(alpaca_tickers)}개 종목 1분봉 수집 중...")
-    print(f"  기간: {start_date} ~ {end_date}")
-    print(f"  종목: {', '.join(alpaca_tickers)}")
-
-    # 월 단위 chunking (API 제한 대응)
-    chunks: list[pd.DataFrame] = []
-    chunk_start = start_date
-    while chunk_start <= end_date:
-        if chunk_start.month == 12:
-            next_month = date(chunk_start.year + 1, 1, 1)
-        else:
-            next_month = date(chunk_start.year, chunk_start.month + 1, 1)
-        chunk_end = min(next_month - timedelta(days=1), end_date)
-
-        label = f"{chunk_start.strftime('%Y-%m')}"
-        print(f"    [{label}] {chunk_start} ~ {chunk_end} ...", end=" ", flush=True)
-
-        try:
-            request = StockBarsRequest(
-                symbol_or_symbols=alpaca_tickers,
-                timeframe=TimeFrame(1, TimeFrameUnit.Minute),
-                start=datetime.combine(chunk_start, time()),
-                end=datetime.combine(chunk_end + timedelta(days=1), time()),
-            )
-
-            bars = client.get_stock_bars(request)
-            chunk_df = bars.df.reset_index()
-            print(f"{len(chunk_df):,} rows")
-            chunks.append(chunk_df)
-        except Exception as e:
-            print(f"SKIP ({e})")
-
-        chunk_start = next_month
-
-    df = pd.concat(chunks, ignore_index=True)
-    print(f"  [v2] 총 수집: {len(df):,} rows")
-
-    # Alpaca 티커 → PTJ 티커 역매핑 (IREN → IRE)
-    df["symbol"] = df["symbol"].replace(config.ALPACA_TICKER_REVERSE)
-
-    # UTC → US/Eastern 변환
-    df["timestamp"] = pd.to_datetime(df["timestamp"]).dt.tz_convert("US/Eastern")
-
-    # 정규장만 필터 (9:30 ~ 16:00 ET)
-    t = df["timestamp"].dt.time
-    df = df[(t >= MARKET_OPEN) & (t < MARKET_CLOSE)].copy()
-
-    df["date"] = df["timestamp"].dt.date
-    df = df.sort_values(["date", "symbol", "timestamp"]).reset_index(drop=True)
-
-    # 종목별 row 수 출력
-    counts = df.groupby("symbol").size()
-    print(f"  [v2] 종목별 행 수:")
-    for sym, cnt in counts.items():
-        print(f"    {sym}: {cnt:,}")
-
-    df.to_parquet(cache_path, index=False)
-    print(f"  [v2] 필터 후: {len(df):,} rows → {cache_path.name}")
-    return df
-
-
-def fetch_usdkrw_hourly(
-    start_date: date = date(2025, 1, 3),
-    end_date: date = date(2026, 2, 17),
-    use_cache: bool = True,
-) -> pd.DataFrame:
-    """yfinance에서 USD/KRW 1시간봉 수집. parquet 캐시 지원.
-
-    yfinance 제한: 1분봉은 최근 7일만, 1시간봉은 최근 730일까지 가능.
-    환율 백테스트 용도로 1시간봉이면 충분.
-    """
-    cache_path = config.DATA_DIR / "usdkrw_hourly.parquet"
-
-    if use_cache and cache_path.exists():
-        df = pd.read_parquet(cache_path)
-        print(f"  [USD/KRW] 캐시 로드: {len(df):,} rows ({cache_path.name})")
-        return df
-
-    import yfinance as yf
-
-    print(f"  [USD/KRW] yfinance에서 1시간봉 수집 중...")
-    print(f"  기간: {start_date} ~ {end_date}")
-
-    ticker = yf.Ticker("KRW=X")
-    raw = ticker.history(
-        start=str(start_date),
-        end=str(end_date + timedelta(days=1)),
-        interval="1h",
-    )
-
-    if raw.empty:
-        print("  [USD/KRW] 데이터 없음!")
-        return pd.DataFrame()
-
-    df = raw.reset_index()
-    df = df.rename(columns={
-        "Datetime": "timestamp",
-        "Open": "open",
-        "High": "high",
-        "Low": "low",
-        "Close": "close",
-        "Volume": "volume",
-    })
-    df = df[["timestamp", "open", "high", "low", "close", "volume"]].copy()
-
-    # 타임존 → US/Eastern 변환 (주식 시간과 맞추기)
-    df["timestamp"] = pd.to_datetime(df["timestamp"])
-    if df["timestamp"].dt.tz is not None:
-        df["timestamp"] = df["timestamp"].dt.tz_convert("US/Eastern")
-    else:
-        df["timestamp"] = df["timestamp"].dt.tz_localize("UTC").dt.tz_convert("US/Eastern")
-
-    df["date"] = df["timestamp"].dt.date
-    df = df.sort_values("timestamp").reset_index(drop=True)
-
-    df.to_parquet(cache_path, index=False)
-    print(f"  [USD/KRW] 수집 완료: {len(df):,} rows → {cache_path.name}")
-    print(f"  기간: {df['date'].min()} ~ {df['date'].max()}")
-    print(f"  환율 범위: {df['close'].min():.2f} ~ {df['close'].max():.2f}")
-    return df
 
 
 # ============================================================
@@ -873,7 +600,7 @@ class BacktestEngine:
                 "exit_time": t.exit_time,
             })
         df = pd.DataFrame(rows)
-        out = config.DATA_DIR / "backtest_trades.csv"
+        out = config.RESULTS_DIR / "backtests" / "backtest_trades.csv"
         df.to_csv(out, index=False)
         print(f"  거래 로그: {out}")
         return out

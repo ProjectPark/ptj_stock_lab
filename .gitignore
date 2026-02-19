@@ -1,7 +1,9 @@
 # Data (large binary files - do NOT commit)
-data/parquet/
+data/market/
+data/polymarket/
 data/optuna/
 data/results/
+data/meta/
 *.parquet
 *.db
 

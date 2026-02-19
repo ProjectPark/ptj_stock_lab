@@ -11,7 +11,9 @@ from pathlib import Path
 import pandas as pd
 import streamlit as st
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+_ROOT = Path(__file__).resolve().parent
+sys.path.insert(0, str(_ROOT))
+sys.path.insert(0, str(_ROOT / "fetchers"))
 
 from config import (
     BEARISH_TICKERS,

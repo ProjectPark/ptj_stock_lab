@@ -2,50 +2,33 @@
 """
 Alpaca에서 SOXX/IREN 일봉 데이터 수집
 - 기간: 2025-01-03 ~ 2026-02-17
-- 저장: stock_history/soxx_iren_daily.parquet
+- 저장: data/market/daily/soxx_iren_daily.parquet
 """
-import os
 import sys
-from datetime import date, datetime, time, timedelta
+from datetime import date
 from pathlib import Path
 
-import pandas as pd
-from dotenv import load_dotenv
+_ROOT = Path(__file__).resolve().parent.parent
+if str(_ROOT) not in sys.path:
+    sys.path.insert(0, str(_ROOT))
+import config
 
-BASE_DIR = Path(__file__).parent
-PROJECT_ROOT = BASE_DIR.parent
-
-load_dotenv(PROJECT_ROOT / ".env")
-
-from alpaca.data.historical import StockHistoricalDataClient
-from alpaca.data.requests import StockBarsRequest
-from alpaca.data.timeframe import TimeFrame, TimeFrameUnit
-
-client = StockHistoricalDataClient(
-    api_key=os.getenv("ALPACA_API_KEY"),
-    secret_key=os.getenv("ALPACA_SECRET_KEY"),
-)
+from fetchers.alpaca_fetcher import fetch_daily
 
 TICKERS = ["SOXX", "IREN"]
 START = date(2025, 1, 3)
 END = date(2026, 2, 17)
 
-print(f"Alpaca 일봉 수집: {', '.join(TICKERS)}")
-print(f"기간: {START} ~ {END}")
+out_path = config.DAILY_DIR / "soxx_iren_daily.parquet"
 
-request = StockBarsRequest(
-    symbol_or_symbols=TICKERS,
-    timeframe=TimeFrame(1, TimeFrameUnit.Day),
-    start=datetime.combine(START, time()),
-    end=datetime.combine(END + timedelta(days=1), time()),
+df = fetch_daily(
+    tickers=TICKERS,
+    start_date=START,
+    end_date=END,
+    cache_path=out_path,
+    use_cache=False,
     feed="iex",
 )
-
-bars = client.get_stock_bars(request)
-df = bars.df.reset_index()
-
-print(f"\n수집 완료: {len(df):,} rows")
-print(f"컬럼: {list(df.columns)}")
 
 # 종목별 요약
 for ticker in TICKERS:
@@ -57,8 +40,4 @@ for ticker in TICKERS:
     else:
         print(f"\n  {ticker}: 데이터 없음!")
 
-# parquet 저장
-out_path = BASE_DIR / "soxx_iren_daily.parquet"
-df.to_parquet(out_path, index=False)
-print(f"\n저장: {out_path}")
-print(f"파일 크기: {out_path.stat().st_size / 1024:.1f} KB")
+print(f"\n파일 크기: {out_path.stat().st_size / 1024:.1f} KB")

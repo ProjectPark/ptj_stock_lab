@@ -4,7 +4,12 @@ PTJ 매매법 - yfinance 데이터 수집 + parquet 캐시
 from __future__ import annotations
 
 from datetime import datetime, timedelta
+import sys
 from pathlib import Path
+
+_ROOT = Path(__file__).resolve().parent.parent
+if str(_ROOT) not in sys.path:
+    sys.path.insert(0, str(_ROOT))
 
 import pandas as pd
 import yfinance as yf
@@ -13,7 +18,7 @@ import config
 
 
 def _cache_path(ticker: str) -> Path:
-    return config.DATA_DIR / f"{ticker}.parquet"
+    return config.CACHE_DIR / f"{ticker}.parquet"
 
 
 def _is_cache_valid(path: Path) -> bool:

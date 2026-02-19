@@ -5,14 +5,19 @@ yfinance 일봉 데이터 수집 스크립트
 - 출력: market_daily.parquet
 """
 import json
-import yfinance as yf
-import pandas as pd
+import sys
 from pathlib import Path
 
-BASE_DIR = Path(__file__).parent
+import yfinance as yf
+import pandas as pd
+
+_ROOT = Path(__file__).resolve().parent.parent
+if str(_ROOT) not in sys.path:
+    sys.path.insert(0, str(_ROOT))
+import config
 
 # 1) ticker_mapping.json에서 yf_ticker 추출
-with open(BASE_DIR / "ticker_mapping.json") as f:
+with open(config.META_DIR / "ticker_mapping.json") as f:
     mapping = json.load(f)
 
 mapped_tickers = set()
@@ -51,7 +56,7 @@ for ticker in all_tickers:
         print(f"  {ticker}: 데이터 없음!")
 
 # 5) parquet 저장
-out_path = BASE_DIR / "market_daily.parquet"
+out_path = config.DAILY_DIR / "market_daily.parquet"
 df.to_parquet(out_path)
 print(f"\n저장 완료: {out_path}")
 print(f"파일 크기: {out_path.stat().st_size / 1024:.1f} KB")

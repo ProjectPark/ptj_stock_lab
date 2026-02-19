@@ -14,8 +14,23 @@ import os
 PROJECT_ROOT = Path(__file__).resolve().parent
 DATA_DIR = PROJECT_ROOT / "data"
 CHART_DIR = PROJECT_ROOT / "charts"
-DATA_DIR.mkdir(parents=True, exist_ok=True)
-CHART_DIR.mkdir(parents=True, exist_ok=True)
+
+# ── 데이터 하위 디렉토리 ──────────────────────────────────────
+MARKET_DIR    = DATA_DIR / "market"
+CACHE_DIR     = MARKET_DIR / "cache"       # 종목별 일봉 캐시 (자동 갱신)
+OHLCV_DIR     = MARKET_DIR / "ohlcv"       # 백테스트용 합산 분봉
+DAILY_DIR     = MARKET_DIR / "daily"       # 일봉 데이터
+FX_DIR        = MARKET_DIR / "fx"          # 환율
+POLY_DATA_DIR = DATA_DIR / "polymarket"    # Polymarket 확률 (연도별)
+OPTUNA_DIR    = DATA_DIR / "optuna"        # Optuna DB
+RESULTS_DIR   = DATA_DIR / "results"       # 출력 결과
+META_DIR      = DATA_DIR / "meta"          # 메타데이터
+
+for _d in [DATA_DIR, CHART_DIR, CACHE_DIR, OHLCV_DIR, DAILY_DIR, FX_DIR,
+           POLY_DATA_DIR, OPTUNA_DIR, RESULTS_DIR,
+           RESULTS_DIR / "backtests", RESULTS_DIR / "events",
+           META_DIR]:
+    _d.mkdir(parents=True, exist_ok=True)
 
 # ============================================================
 # 한국투자증권 API 인증 (.env 파일에서 로드)

@@ -1,12 +1,20 @@
 """
 쌍둥이 갭 백테스트 — 5분봉 기반 시뮬레이션
 """
+import sys
+from pathlib import Path
+
+_ROOT = Path(__file__).resolve().parent.parent
+if str(_ROOT) not in sys.path:
+    sys.path.insert(0, str(_ROOT))
+
 import pandas as pd
 import numpy as np
+import config
 
 # ── 설정 ──────────────────────────────────────────────
-DATA_PATH = "data/backtest_5min.parquet"
-OUTPUT_PATH = "stock_history/backtest_twin_gap.csv"
+DATA_PATH = config.OHLCV_DIR / "backtest_5min.parquet"
+OUTPUT_PATH = config.RESULTS_DIR / "backtests" / "backtest_twin_gap.csv"
 
 PAIRS = {
     "coin": {"lead": "BITU", "follow": "MSTU"},

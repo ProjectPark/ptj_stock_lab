@@ -20,19 +20,27 @@ import time
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
+import sys
+
 import requests
+
+_ROOT = Path(__file__).resolve().parent.parent
+if str(_ROOT) not in sys.path:
+    sys.path.insert(0, str(_ROOT))
+import config
 
 from polymarket.poly_config import (
     GAMMA_API_BASE,
     INDICATORS,
     REQUEST_TIMEOUT,
 )
+from polymarket.poly_common import fetch_event as _fetch_event, extract_final_prices
 from polymarket.poly_fetcher import build_slug
 
 logger = logging.getLogger(__name__)
 
 CLOB_API_BASE = "https://clob.polymarket.com"
-HISTORY_DIR = Path(__file__).parent / "history"
+HISTORY_DIR = config.POLY_DATA_DIR
 
 # rate limit 간격 (초)
 API_DELAY = 0.4
@@ -112,24 +120,7 @@ def fetch_price_history(
         return []
 
 
-# ------------------------------------------------------------------
-# Gamma API 이벤트 조회 (재사용)
-# ------------------------------------------------------------------
-
-def _fetch_event(slug: str) -> dict | None:
-    """Gamma API에서 이벤트 1건을 조회한다."""
-    url = f"{GAMMA_API_BASE}/events"
-    try:
-        resp = requests.get(url, params={"slug": slug}, timeout=REQUEST_TIMEOUT)
-        resp.raise_for_status()
-        data = resp.json()
-        if not data:
-            return None
-        return data[0]
-    except (requests.RequestException, IndexError, json.JSONDecodeError) as e:
-        logger.error("Gamma API failed for slug %s: %s", slug, e)
-        return None
-
+# _fetch_event는 poly_common에서 import
 
 # ------------------------------------------------------------------
 # 날짜 → Unix timestamp 변환
@@ -227,12 +218,7 @@ def collect_history_for_date(
                 continue
 
             # 최종 가격 (정산 결과) 추출
-            final_prices = {}
-            for market in event.get("markets", []):
-                outcomes = json.loads(market.get("outcomes", "[]"))
-                prices = json.loads(market.get("outcomePrices", "[]"))
-                for i in range(min(len(outcomes), len(prices))):
-                    final_prices[outcomes[i]] = prices[i]
+            final_prices = extract_final_prices(event)
 
             # 각 마켓의 outcome별 가격 히스토리 수집
             markets_data = []

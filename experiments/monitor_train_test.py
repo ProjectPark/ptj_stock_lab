@@ -1,5 +1,13 @@
 #!/usr/bin/env python3
 """Train/Test 최적화 실시간 모니터링"""
+import sys
+from pathlib import Path
+
+_ROOT = Path(__file__).resolve().parent.parent
+if str(_ROOT) not in sys.path:
+    sys.path.insert(0, str(_ROOT))
+
+import config
 import optuna
 from datetime import datetime
 import time
@@ -11,7 +19,7 @@ def monitor():
 
         study = optuna.load_study(
             study_name='ptj_v3_train_test_v2',
-            storage='sqlite:///data/optuna_v3_train_test_v2.db'
+            storage=f"sqlite:///{config.OPTUNA_DIR / 'optuna_v3_train_test_v2.db'}"
         )
         completed = [t for t in study.trials if t.state == optuna.trial.TrialState.COMPLETE]
 

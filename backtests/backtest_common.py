@@ -53,6 +53,73 @@ def load_parquet(path: str | Path) -> pd.DataFrame:
     return df
 
 
+def load_market_daily(path: str | Path) -> pd.DataFrame:
+    """market_daily.parquet (yfinance MultiIndex wide) → long format 변환.
+
+    market_daily.parquet는 yfinance 수집 형식으로,
+    MultiIndex columns ``(Ticker, OHLCV)``·``Date`` 인덱스 구조를 가진다.
+    이를 백테스트 엔진이 사용하는 long format으로 변환한다.
+
+    Parameters
+    ----------
+    path : str | Path
+        market_daily.parquet 경로
+
+    Returns
+    -------
+    pd.DataFrame
+        columns: date (Python date), symbol (str),
+                 open, high, low, close (float), volume (int/float)
+        파일 없거나 형식 불일치 시 빈 DataFrame 반환.
+    """
+    path = Path(path)
+    if not path.exists():
+        print(f"  [WARN] market_daily 없음: {path} — 1분봉 집계 사용")
+        return pd.DataFrame()
+
+    try:
+        df = pd.read_parquet(path)
+    except Exception as e:
+        print(f"  [WARN] market_daily 로드 실패: {e} — 1분봉 집계 사용")
+        return pd.DataFrame()
+
+    if not isinstance(df.columns, pd.MultiIndex):
+        print(f"  [WARN] market_daily 컬럼 형식 불일치 (MultiIndex 아님) — 1분봉 집계 사용")
+        return pd.DataFrame()
+
+    # MultiIndex (Ticker, Price) → long format
+    # stack(level=0): Ticker 레벨을 인덱스로 이동
+    df_long = df.stack(level=0, future_stack=True).reset_index()
+
+    # 컬럼명 정규화: Date → date, level_1(Ticker) → symbol, Open/High/Low/Close/Volume → lower
+    col_map = {}
+    for c in df_long.columns:
+        c_lower = c.lower()
+        if c_lower == "date":
+            col_map[c] = "date"
+        elif c_lower in ("ticker", "symbol", "level_1"):
+            col_map[c] = "symbol"
+        elif c_lower in ("open", "high", "low", "close", "volume"):
+            col_map[c] = c_lower
+        else:
+            col_map[c] = c
+    df_long = df_long.rename(columns=col_map)
+
+    if "date" not in df_long.columns or "symbol" not in df_long.columns:
+        print(f"  [WARN] market_daily 변환 실패 (date/symbol 컬럼 없음) — 1분봉 집계 사용")
+        return pd.DataFrame()
+
+    # Date → Python date object
+    df_long["date"] = pd.to_datetime(df_long["date"]).dt.date
+
+    df_long = df_long.sort_values(["symbol", "date"]).reset_index(drop=True)
+
+    min_d = df_long["date"].min()
+    max_d = df_long["date"].max()
+    print(f"  Loaded market_daily: {len(df_long):,} rows ({min_d} ~ {max_d})")
+    return df_long
+
+
 def load_fx_hourly(path: str | Path) -> pd.Series:
     """시간별 USD/KRW 환율 데이터를 로드한다.
 
@@ -95,7 +162,10 @@ def load_polymarket_daily(history_dir: str | Path) -> dict[date, dict]:
     history_dir = Path(history_dir)
     result: dict[date, dict] = {}
 
-    json_files = sorted(history_dir.glob("*.json"))
+    json_files = sorted(
+        f for f in history_dir.rglob("*.json")
+        if "_cache" not in f.parts
+    )
     if not json_files:
         print(f"  Loaded Polymarket: 0 days (no files)")
         return result

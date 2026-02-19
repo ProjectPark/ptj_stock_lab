@@ -1,9 +1,17 @@
 """5분봉 시그널 타임라인 생성 스크립트"""
+import sys
+from pathlib import Path
+
+_ROOT = Path(__file__).resolve().parent.parent
+if str(_ROOT) not in sys.path:
+    sys.path.insert(0, str(_ROOT))
+
 import pandas as pd
 import numpy as np
+import config
 
 # ── 데이터 로드 ──
-df = pd.read_parquet("data/backtest_5min.parquet")
+df = pd.read_parquet(config.OHLCV_DIR / "backtest_5min.parquet")
 df = df.sort_values(["symbol", "timestamp"]).reset_index(drop=True)
 
 # ── 당일 시가 계산 ──
@@ -94,7 +102,7 @@ result["R5_market_down"] = (result["R5_SPY_pct"] < 0) & (result["R5_QQQ_pct"] < 
 result["R5_gold_up"] = result["R5_market_down"] & (result["R1_GLD_pct"] > 0)
 
 # ── CSV 저장 ──
-output_path = "stock_history/backtest_signals_5min.csv"
+output_path = config.RESULTS_DIR / "backtests" / "backtest_signals_5min.csv"
 result.to_csv(output_path, index=False)
 print(f"저장 완료: {output_path} ({len(result):,} rows)")
 

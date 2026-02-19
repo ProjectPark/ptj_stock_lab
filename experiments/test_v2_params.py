@@ -10,6 +10,12 @@ from __future__ import annotations
 import sys
 import time
 from dataclasses import dataclass
+from pathlib import Path
+
+_ROOT = Path(__file__).resolve().parent.parent
+for _p in [str(_ROOT), str(_ROOT / "backtests"), str(_ROOT / "strategies")]:
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
 
 import config
 import backtest_common

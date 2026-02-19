@@ -9,6 +9,12 @@ from __future__ import annotations
 
 import sys
 from datetime import date, timedelta
+from pathlib import Path
+
+_ROOT = Path(__file__).resolve().parent.parent
+for _p in [str(_ROOT), str(_ROOT / "backtests"), str(_ROOT / "strategies")]:
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
 
 import numpy as np
 import pandas as pd
@@ -195,7 +201,8 @@ def main():
         df_year.assign(period="1년"),
         df_month.assign(period="1개월"),
     ])
-    csv_path = config.DATA_DIR / "stoploss_optimization.csv"
+    (config.RESULTS_DIR / "optimization").mkdir(parents=True, exist_ok=True)
+    csv_path = config.RESULTS_DIR / "optimization" / "stoploss_optimization.csv"
     combined.to_csv(csv_path, index=False)
     print(f"  결과 CSV: {csv_path}")
     print()

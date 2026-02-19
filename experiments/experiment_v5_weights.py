@@ -6,7 +6,13 @@ import json
 import random
 import time
 from datetime import datetime
+import sys
 from pathlib import Path
+
+_ROOT = Path(__file__).resolve().parent.parent
+for _p in [str(_ROOT), str(_ROOT / "backtests"), str(_ROOT / "strategies"), str(_ROOT / "optimizers")]:
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
 
 from optimize_v5_optuna import _get_baseline_params, _run_single_trial
 

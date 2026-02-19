@@ -1,0 +1,162 @@
+{
+  "result": {
+    "final_equity": 17192.06996412132,
+    "total_return_pct": 14.61379976080881,
+    "mdd": 12.13,
+    "sharpe": 0.7434,
+    "total_fees": 626.8521501158062,
+    "total_sells": 88,
+    "total_buys": 22,
+    "win_rate": 39.77272727272727,
+    "win_count": 35,
+    "loss_count": 37,
+    "avg_win": 52.70857142857143,
+    "avg_loss": -80.70297297297297,
+    "total_pnl": -1141.21,
+    "stop_loss_count": 1,
+    "stop_loss_pnl": -7.67,
+    "time_stop_count": 4,
+    "eod_close_count": 4,
+    "sideways_days": 35,
+    "sideways_blocks": 0,
+    "entry_cutoff_blocks": 1854,
+    "daily_limit_blocks": 0,
+    "cb_buy_blocks": 2057,
+    "cb_sell_halt_bars": 2508,
+    "total_trading_days": 240,
+    "sig_stats": {
+      "twin": {
+        "count": 43,
+        "pnl": 294.62999999999994,
+        "wins": 31
+      },
+      "swing_stage1": {
+        "count": 2,
+        "pnl": -2566.7200000000003,
+        "wins": 0
+      },
+      "swing_stage2": {
+        "count": 1,
+        "pnl": 1236.23,
+        "wins": 1
+      },
+      "conditional_conl": {
+        "count": 39,
+        "pnl": -158.12,
+        "wins": 2
+      },
+      "conditional_coin": {
+        "count": 3,
+        "pnl": 52.77,
+        "wins": 1
+      }
+    },
+    "exit_stats": {
+      "time_stop": {
+        "count": 4,
+        "pnl": -126.19000000000003,
+        "wins": 2
+      },
+      "twin_converge": {
+        "count": 7,
+        "pnl": 80.25999999999999,
+        "wins": 4
+      },
+      "staged_sell": {
+        "count": 65,
+        "pnl": 40.87000000000002,
+        "wins": 24
+      },
+      "stop_loss": {
+        "count": 1,
+        "pnl": -7.67,
+        "wins": 0
+      },
+      "swing_stage1_drawdown_stop": {
+        "count": 2,
+        "pnl": -2566.7200000000003,
+        "wins": 0
+      },
+      "swing_stage2_maturity": {
+        "count": 1,
+        "pnl": 1236.23,
+        "wins": 1
+      },
+      "eod_close": {
+        "count": 4,
+        "pnl": -15.030000000000001,
+        "wins": 0
+      },
+      "fixed_tp": {
+        "count": 1,
+        "pnl": 87.21,
+        "wins": 1
+      },
+      "conl_profit": {
+        "count": 1,
+        "pnl": 26.52,
+        "wins": 1
+      },
+      "coin_profit": {
+        "count": 1,
+        "pnl": 67.68,
+        "wins": 1
+      },
+      "carry_sell": {
+        "count": 1,
+        "pnl": 35.63,
+        "wins": 1
+      }
+    }
+  },
+  "params": {
+    "V4_PAIR_GAP_ENTRY_THRESHOLD": 2.2,
+    "V4_DCA_MAX_COUNT": 4,
+    "V4_MAX_PER_STOCK": 5250,
+    "V4_INITIAL_BUY": 2250,
+    "V4_DCA_BUY": 750,
+    "V4_COIN_TRIGGER_PCT": 4.5,
+    "V4_CONL_TRIGGER_PCT": 4.5,
+    "V4_SPLIT_BUY_INTERVAL_MIN": 20,
+    "V4_ENTRY_CUTOFF_HOUR": 10,
+    "V4_ENTRY_CUTOFF_MINUTE": 0,
+    "V4_SIDEWAYS_MIN_SIGNALS": 3,
+    "V4_SIDEWAYS_POLY_LOW": 0.4,
+    "V4_SIDEWAYS_POLY_HIGH": 0.6,
+    "V4_SIDEWAYS_GLD_THRESHOLD": 0.3,
+    "V4_SIDEWAYS_GAP_FAIL_COUNT": 2,
+    "V4_SIDEWAYS_TRIGGER_FAIL_COUNT": 2,
+    "V4_SIDEWAYS_INDEX_THRESHOLD": 0.5,
+    "V4_SIDEWAYS_ATR_DECLINE_PCT": 20.0,
+    "V4_SIDEWAYS_VOLUME_DECLINE_PCT": 30.0,
+    "V4_SIDEWAYS_EMA_SLOPE_MAX": 0.1,
+    "V4_SIDEWAYS_RSI_LOW": 45.0,
+    "V4_SIDEWAYS_RSI_HIGH": 55.0,
+    "V4_SIDEWAYS_RANGE_MAX_PCT": 2.0,
+    "V4_CB_GLD_SPIKE_PCT": 3.0,
+    "V4_CB_GLD_COOLDOWN_DAYS": 3,
+    "V4_CB_BTC_CRASH_PCT": -5.0,
+    "V4_CB_BTC_SURGE_PCT": 5.0,
+    "V4_CB_VIX_SPIKE_PCT": 6.0,
+    "V4_CB_VIX_COOLDOWN_DAYS": 7,
+    "V4_HIGH_VOL_MOVE_PCT": 10.0,
+    "V4_HIGH_VOL_HIT_COUNT": 2,
+    "V4_HIGH_VOL_STOP_LOSS_PCT": -4.0,
+    "V4_CONL_ADX_MIN": 18.0,
+    "V4_CONL_EMA_SLOPE_MIN_PCT": 0.0,
+    "V4_PAIR_IMMEDIATE_SELL_PCT": 0.4,
+    "V4_PAIR_FIXED_TP_PCT": 5.0,
+    "STOP_LOSS_PCT": -3.0,
+    "STOP_LOSS_BULLISH_PCT": -8.0,
+    "COIN_SELL_PROFIT_PCT": 3.0,
+    "COIN_SELL_BEARISH_PCT": 0.3,
+    "CONL_SELL_PROFIT_PCT": 2.8,
+    "CONL_SELL_AVG_PCT": 1.0,
+    "DCA_DROP_PCT": -0.5,
+    "MAX_HOLD_HOURS": 5,
+    "TAKE_PROFIT_PCT": 2.0,
+    "PAIR_GAP_SELL_THRESHOLD_V2": 0.9,
+    "PAIR_SELL_FIRST_PCT": 0.8
+  },
+  "timestamp": "2026-02-19T02:07:51.450498"
+}

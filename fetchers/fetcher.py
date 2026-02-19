@@ -5,14 +5,20 @@ yfinance 기반 데이터 수집기
 - 3개월 일봉 히스토리 (parquet 캐시)
 """
 
+import sys
 import logging
 import time
 from datetime import datetime, timedelta
+from pathlib import Path
+
+_ROOT = Path(__file__).resolve().parent.parent
+if str(_ROOT) not in sys.path:
+    sys.path.insert(0, str(_ROOT))
 
 import pandas as pd
 import yfinance as yf
 
-from config import CACHE_EXPIRE_HOURS, DATA_DIR, LOOKBACK_PERIOD, TICKERS
+from config import CACHE_EXPIRE_HOURS, DAILY_DIR, LOOKBACK_PERIOD, TICKERS
 
 logging.basicConfig(
     level=logging.INFO,
@@ -155,12 +161,12 @@ def get_intraday_pct_series(intraday_df: pd.DataFrame, symbols: list[str]) -> pd
 # 히스토리 (3개월 일봉, parquet 캐시)
 # ------------------------------------------------------------------
 def _cache_path() -> str:
-    return str(DATA_DIR / "history.parquet")
+    return str(DAILY_DIR / "history.parquet")
 
 
 def _cache_is_fresh() -> bool:
     """캐시 파일이 존재하고 만료되지 않았으면 True"""
-    path = DATA_DIR / "history.parquet"
+    path = DAILY_DIR / "history.parquet"
     if not path.exists():
         return False
     mtime = datetime.fromtimestamp(path.stat().st_mtime)

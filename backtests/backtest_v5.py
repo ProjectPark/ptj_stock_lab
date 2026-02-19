@@ -19,12 +19,19 @@ Dependencies:
   - config.py          : v5 parameters
   - signals_v5.py      : v5 signal functions
   - backtest_common.py : shared utilities
+  - backtest_base.py   : BacktestBase ABC
 """
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime, date, time, timedelta
+import sys
 from pathlib import Path
+
+_ROOT = Path(__file__).resolve().parent.parent
+for _p in [str(_ROOT), str(_ROOT / "strategies")]:
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
 
 import numpy as np
 import pandas as pd
@@ -32,6 +39,7 @@ import pandas as pd
 import config
 import signals_v5
 import backtest_common
+from backtest_base import BacktestBase
 
 # ============================================================
 # Constants
@@ -92,34 +100,48 @@ class TradeV5:
 # ============================================================
 # Backtest Engine v5
 # ============================================================
-class BacktestEngineV5:
+class BacktestEngineV5(BacktestBase):
     def __init__(
         self,
         initial_capital_krw: float = config.V5_TOTAL_CAPITAL,
         start_date: date = date(2025, 2, 18),
         end_date: date = date(2026, 2, 17),
         use_fees: bool = True,
+        params=None,
     ):
+        # Backward compat: build params from config if not provided
+        if params is None:
+            from strategies.params import v5_params_from_config
+            params = v5_params_from_config()
+
+        super().__init__(
+            params=params,
+            start_date=start_date,
+            end_date=end_date,
+            use_fees=use_fees,
+        )
+
         # NOTE:
         # - 필드명은 하위 호환을 위해 *_krw를 유지하지만
         # - 값 자체는 USD 단위로 계산/저장한다.
-        self.initial_capital_krw = initial_capital_krw
-        self.cash_krw = initial_capital_krw
-        self.start_date = start_date
-        self.end_date = end_date
-        self.use_fees = use_fees
+        # Alias for backward compatibility
+        self.initial_capital_krw = self.initial_capital
+        self.cash_krw = self.cash
+        self.total_buy_fees_krw = 0.0
+        self.total_sell_fees_krw = 0.0
+
+    # ----------------------------------------------------------
+    # BacktestBase hooks
+    # ----------------------------------------------------------
+    def _version_label(self) -> str:
+        return "v5 선별 매매형"
+
+    def _init_version_state(self) -> None:
         self._fx_fallback = 1.0
         self._fx_series: pd.Series | None = None
         self._current_fx_rate: float = 1.0
-        self._verbose = False
 
-        # State
-        self.positions: dict[str, Position] = {}
-        self.trades: list[TradeV5] = []
-        self.equity_curve: list[tuple[date, float]] = []
-        self._sold_today: set[str] = set()
         self._traded_today: dict[str, int] = {}  # v5: 종목별 당일 트레이드 수
-        self._last_buy_time: dict[str, datetime] = {}
 
         # v5 횡보장 상태
         self._sideways_active: bool = False
@@ -154,13 +176,227 @@ class BacktestEngineV5:
         self._gdxu_entry_day_idx: int | None = None
         self._entry_early_ok: dict[tuple[str, object], bool] = {}
 
-        # Fee accumulators
-        self.total_buy_fees_krw: float = 0.0
-        self.total_sell_fees_krw: float = 0.0
+    def _load_extra_data(self, df: pd.DataFrame, poly: dict) -> None:
+        self._prepare_entry_early_metrics(df)
 
-        # Statistics
-        self.total_trading_days: int = 0
-        self.skipped_gold_bars: int = 0
+    def _warmup_extra(self, warmup_dates: list, sym_bars: dict, prev_close: dict) -> None:
+        pass
+
+    def _print_run_header(self) -> None:
+        if self._verbose:
+            print(f"  초기 자금: ${self.initial_capital_krw:,.2f}")
+            print(f"  v5 주요 변경: ENTRY {config.V5_PAIR_GAP_ENTRY_THRESHOLD}% | "
+                  f"DCA {config.V5_DCA_MAX_COUNT}회 | "
+                  f"트리거 {config.V5_COIN_TRIGGER_PCT}% | "
+                  f"쿨타임 {config.V5_SPLIT_BUY_INTERVAL_MIN}분 | "
+                  f"횡보장 감지 {'ON' if config.V5_SIDEWAYS_ENABLED else 'OFF'}")
+            print("  통화 단위: USD (환율 변환 미사용)\n")
+
+    def _print_day_progress(
+        self, day_idx: int, total_days: int, trading_date: date,
+        equity: float, day_ctx: dict,
+    ) -> None:
+        mode_str = "횡보" if day_ctx.get("day_had_sideways") else day_ctx.get("base_mode", "?")
+        print(
+            f"  [{day_idx+1:>3}/{total_days}] {trading_date}  "
+            f"자산: ${equity:,.2f}  "
+            f"현금: ${self.cash_krw:,.2f}  "
+            f"포지션: {len(self.positions)}개  "
+            f"모드: {mode_str}"
+        )
+
+    def _on_day_start(
+        self,
+        trading_date: date,
+        day_idx: int,
+        day_sym: dict,
+        day_ts: list,
+        poly_probs: dict | None,
+        prev_close: dict[str, float],
+    ) -> dict:
+        # (a-1) CB 쿨다운(거래일 기준) 감소
+        if self._cb_vix_cooldown_days > 0:
+            self._cb_vix_cooldown_days -= 1
+        if self._cb_gld_cooldown_days > 0:
+            self._cb_gld_cooldown_days -= 1
+        if self._cb_rate_leverage_cooldown_days > 0:
+            self._cb_rate_leverage_cooldown_days -= 1
+        self._unix_signal_active_today = self._unix_signal_next_day
+
+        # (b) Reset daily state
+        self._sold_today.clear()
+        self._traded_today.clear()
+        self._gap_fail_count = 0
+        self._trigger_fail_count = 0
+        self._gap_entry_tickers.clear()
+        self._high_vol_hits.clear()
+        self._high_vol_last_above.clear()
+        self._sideways_active = False
+        self._sideways_last_eval = None
+        self._cb_block_new_buys = self._cb_gld_cooldown_days > 0 or self._cb_vix_cooldown_days > 0
+        if "GDXU" in self.positions and self._gdxu_entry_day_idx is None:
+            self._gdxu_entry_day_idx = day_idx
+
+        # (c) Handle carry positions from previous day
+        base_mode = signals_v5.determine_market_mode_v5(poly_probs, sideways_active=False)
+        self._handle_carry_positions(day_sym, day_ts, base_mode, prev_close)
+
+        # (d) Determine stop loss threshold
+        if base_mode == "bullish":
+            stop_loss_threshold = config.STOP_LOSS_BULLISH_PCT
+        else:
+            stop_loss_threshold = config.STOP_LOSS_PCT
+
+        # (e) Select coin follow (carry 포지션 있으면 해당 종목 유지)
+        carry_follow = None
+        for cand in ["MSTU", "IRE"]:
+            if cand in self.positions:
+                carry_follow = cand
+                break
+        coin_follow = carry_follow if carry_follow else self._select_coin_follow(day_sym, trading_date)
+        today_pairs = {}
+        for pair_key, pair_cfg in config.TWIN_PAIRS_V5.items():
+            if pair_key == "coin":
+                today_pairs[pair_key] = {
+                    "lead": pair_cfg["lead"],
+                    "follow": [coin_follow],
+                    "label": f"코인 (BTC -> {coin_follow})",
+                }
+            else:
+                today_pairs[pair_key] = pair_cfg
+
+        return {
+            "poly_probs": poly_probs,
+            "base_mode": base_mode,
+            "stop_loss_threshold": stop_loss_threshold,
+            "today_pairs": today_pairs,
+            "day_had_sideways": False,
+            "day_sym": day_sym,
+            "day_ts": day_ts,
+            "day_idx": day_idx,
+        }
+
+    def _on_bar(
+        self,
+        ts: datetime,
+        cur_prices: dict[str, float],
+        changes: dict[str, dict],
+        day_ctx: dict,
+    ) -> None:
+        poly_probs = day_ctx["poly_probs"]
+        base_mode = day_ctx["base_mode"]
+        stop_loss_threshold = day_ctx["stop_loss_threshold"]
+        today_pairs = day_ctx["today_pairs"]
+        day_idx = day_ctx["day_idx"]
+
+        self._update_high_vol_state(changes)
+
+        # v5: 서킷브레이커 업데이트 (신규 매수 차단만 적용)
+        self._update_circuit_breaker_state(changes, poly_probs)
+
+        # v5: 횡보장 재평가 (30분 간격)
+        self._evaluate_sideways(ts, poly_probs, changes)
+        if self._sideways_active:
+            day_ctx["day_had_sideways"] = True
+
+        # 시그널 생성 (v5)
+        sigs = signals_v5.generate_all_signals_v5(
+            changes,
+            poly_probs=poly_probs,
+            pairs=today_pairs,
+            sideways_active=self._sideways_active,
+            entry_threshold=config.V5_PAIR_GAP_ENTRY_THRESHOLD,
+            coin_trigger_pct=config.V5_COIN_TRIGGER_PCT,
+            coin_sell_profit_pct=config.COIN_SELL_PROFIT_PCT,
+            coin_sell_bearish_pct=config.COIN_SELL_BEARISH_PCT,
+            conl_trigger_pct=config.V5_CONL_TRIGGER_PCT,
+            conl_sell_profit_pct=config.CONL_SELL_PROFIT_PCT,
+            conl_sell_avg_pct=config.CONL_SELL_AVG_PCT,
+        )
+
+        gold_warning = sigs["gold"]["warning"]
+
+        # v5: 갭 수렴 추적
+        self._track_gap_convergence(sigs)
+
+        # ========== SELL (항상 실행) ==========
+        self._process_sells(
+            cur_prices, changes, sigs, ts, base_mode,
+            stop_loss_threshold,
+        )
+
+        # ========== Unix(VIX) defense ==========
+        self._process_unix_defense(ts, cur_prices, day_idx)
+
+        # ========== BUY (횡보장/시간/일일 게이트 적용) ==========
+        self._process_buys(
+            cur_prices, changes, sigs, ts, base_mode,
+            gold_warning, today_pairs,
+        )
+
+    def _on_day_end(
+        self,
+        trading_date: date,
+        day_idx: int,
+        last_prices: dict[str, float],
+        last_ts: datetime | None,
+        prev_close: dict[str, float],
+        day_ctx: dict,
+    ) -> None:
+        base_mode = day_ctx["base_mode"]
+
+        if base_mode == "bullish":
+            for ticker, pos in self.positions.items():
+                if not pos.carry:
+                    pos.carry = True
+        else:
+            for ticker in list(self.positions.keys()):
+                if ticker in DEFENSE_TICKERS:
+                    continue
+                price = last_prices.get(ticker)
+                if price is not None:
+                    self._count_gap_fail_on_sell(ticker, "eod_close")
+                    self._count_trigger_fail_on_sell(ticker, "eod_close")
+                    self._sell_all(ticker, price, last_ts, "eod_close")
+
+        # v5: ENTRY 시그널 발생 후 미수렴 상태 flush (매수 안 된 것 포함)
+        self._flush_gap_entry_eod()
+
+        # Unix(VIX) 일간 신호 계산: 종가 확정 후, 다음 거래일에 적용
+        prev_vix_close = prev_close.get("VIX")
+        cur_vix_close = last_prices.get("VIX")
+        if prev_vix_close and prev_vix_close > 0 and cur_vix_close is not None:
+            self._unix_signal_last_pct = (cur_vix_close / prev_vix_close - 1.0) * 100.0
+            self._unix_signal_next_day = self._unix_signal_last_pct >= config.V5_UNIX_DEFENSE_TRIGGER_PCT
+        else:
+            self._unix_signal_last_pct = 0.0
+            self._unix_signal_next_day = False
+
+        # IAU 금지 트리거: IAU 보유 중 GDXU 일간 -12% 이하
+        iau_ban_triggered = False
+        prev_gdxu_close = prev_close.get("GDXU")
+        cur_gdxu_close = last_prices.get("GDXU")
+        if "IAU" in self.positions and prev_gdxu_close and prev_gdxu_close > 0 and cur_gdxu_close is not None:
+            gdxu_day_pct = (cur_gdxu_close / prev_gdxu_close - 1.0) * 100.0
+            if gdxu_day_pct <= config.V5_IAU_BAN_TRIGGER_GDXU_DROP_PCT:
+                iau_price = last_prices.get("IAU")
+                if iau_price is not None:
+                    self._sell_all("IAU", iau_price, last_ts, "iau_ban_trigger")
+                self._iau_ban_days_remaining = config.V5_IAU_BAN_DURATION_TRADING_DAYS
+                iau_ban_triggered = True
+
+        # IAU 금지 카운트: 트리거 발생일은 Day0로 카운트 제외
+        if not iau_ban_triggered and self._iau_ban_days_remaining > 0:
+            self._iau_ban_days_remaining -= 1
+
+        if day_ctx.get("day_had_sideways"):
+            self.sideways_days += 1
+
+    # ----------------------------------------------------------
+    # Equity override for USD (no FX)
+    # ----------------------------------------------------------
+    def _snapshot_equity(self, cur_prices: dict[str, float]) -> float:
+        return self._calc_total_equity(cur_prices)
 
     # ----------------------------------------------------------
     # FX rate lookup
@@ -263,14 +499,6 @@ class BacktestEngineV5:
     # v5: Buy eligibility (시간/일일제한/횡보장/쿨타임)
     # ----------------------------------------------------------
     def _can_buy(self, ticker: str, ts: datetime, is_conditional: bool = False) -> bool:
-        """v5 매수 가능 여부. 횡보장/시간/일일제한/쿨타임 검증.
-
-        Parameters
-        ----------
-        is_conditional : bool
-            True이면 조건부 매매(COIN/CONL).
-            v5 규칙상 시간 필터는 조건부에도 동일 적용한다.
-        """
         # 1. v5 서킷브레이커 → 신규 매수 차단 (매도는 허용)
         if self._cb_block_new_buys:
             self.cb_buy_blocks += 1
@@ -361,66 +589,6 @@ class BacktestEngineV5:
             return False
 
         return True
-
-    # ----------------------------------------------------------
-    # Market time elapsed
-    # ----------------------------------------------------------
-    @staticmethod
-    def _market_minutes_elapsed(entry_time: datetime, current_time: datetime) -> float:
-        if current_time <= entry_time:
-            return 0.0
-        entry_date = entry_time.date()
-        current_date = current_time.date()
-        total_minutes = 0.0
-        d = entry_date
-        while d <= current_date:
-            day_open = datetime.combine(d, MARKET_OPEN)
-            day_close = datetime.combine(d, MARKET_CLOSE)
-            if hasattr(entry_time, 'tzinfo') and entry_time.tzinfo is not None:
-                day_open = day_open.replace(tzinfo=entry_time.tzinfo)
-                day_close = day_close.replace(tzinfo=entry_time.tzinfo)
-            if d == entry_date:
-                effective_start = max(entry_time, day_open)
-            else:
-                effective_start = day_open
-            if d == current_date:
-                effective_end = min(current_time, day_close)
-            else:
-                effective_end = day_close
-            if effective_end > effective_start:
-                total_minutes += (effective_end - effective_start).total_seconds() / 60
-            d += timedelta(days=1)
-        return total_minutes
-
-    # ----------------------------------------------------------
-    # Coin follow selection
-    # ----------------------------------------------------------
-    def _select_coin_follow(self, sym_bars_day: dict[str, list[dict]], trading_date=None) -> str:
-        candidates = ["MSTU", "IRE"]
-        stats: dict[str, dict] = {}
-        for ticker in candidates:
-            bars = sym_bars_day.get(ticker, [])[:30]
-            if not bars:
-                continue
-            open_price = bars[0]["open"]
-            if open_price <= 0:
-                continue
-            high_max = max(b["high"] for b in bars)
-            low_min = min(b["low"] for b in bars)
-            vol = (high_max - low_min) / open_price * 100
-            volume = sum(b["volume"] for b in bars)
-            stats[ticker] = {"volatility": vol, "volume": volume}
-        if len(stats) == 0:
-            return "MSTU"
-        if len(stats) == 1:
-            return list(stats.keys())[0]
-        mstu_vol = stats["MSTU"]["volatility"]
-        ire_vol = stats["IRE"]["volatility"]
-        diff = abs(mstu_vol - ire_vol)
-        if diff >= config.COIN_FOLLOW_VOLATILITY_GAP:
-            return "MSTU" if mstu_vol > ire_vol else "IRE"
-        else:
-            return "MSTU" if stats["MSTU"]["volume"] >= stats["IRE"]["volume"] else "IRE"
 
     def _prepare_entry_early_metrics(self, df: pd.DataFrame) -> None:
         """조기 진입(ADX + EMA + 거래량배수) 조건을 timestamp 단위로 계산한다."""
@@ -722,9 +890,7 @@ class BacktestEngineV5:
                 self._gap_entry_tickers.add(follow)
             elif signal == "SELL" and follow in self._gap_entry_tickers:
                 self._gap_entry_tickers.discard(follow)
-                # 수렴 성공 → 카운트 안 함
             elif signal == "HOLD" and follow in self._gap_entry_tickers:
-                # 여전히 대기 중 — 나중에 시간 손절/EOD에서 실패 처리됨
                 pass
 
     def _update_high_vol_state(self, changes: dict[str, dict]) -> None:
@@ -740,7 +906,6 @@ class BacktestEngineV5:
         self._high_vol_last_above = next_above
 
     def _count_gap_fail_on_sell(self, ticker: str, exit_reason: str) -> None:
-        """갭 ENTRY 후 수렴 없이 손절/시간손절/EOD 매도 → 실패 카운트."""
         if ticker in self._gap_entry_tickers and exit_reason in (
             "stop_loss", "time_stop", "eod_close",
         ):
@@ -748,19 +913,10 @@ class BacktestEngineV5:
             self._gap_entry_tickers.discard(ticker)
 
     def _flush_gap_entry_eod(self) -> None:
-        """EOD: ENTRY 시그널 발생 후 미수렴 상태로 남은 종목 → 실패 카운트.
-
-        매수되지 않았지만 ENTRY 시그널이 발생한 경우도 실패로 카운트한다.
-        (규칙서 1-2 #3: '시그널 발생 후 수렴 실패')
-        """
         self._gap_fail_count += len(self._gap_entry_tickers)
         self._gap_entry_tickers.clear()
 
     def _count_trigger_fail_on_sell(self, ticker: str, exit_reason: str) -> None:
-        """조건부 매매 트리거 발동 후 목표 수익 미달 매도 → 실패 카운트.
-
-        COIN/CONL이 손절/시간손절/EOD로 청산되면 트리거 불발로 카운트한다.
-        """
         if exit_reason not in ("stop_loss", "time_stop", "eod_close", "conl_avg_drop"):
             return
         pos = self.positions.get(ticker)
@@ -771,17 +927,6 @@ class BacktestEngineV5:
     # v5: Circuit breaker state
     # ----------------------------------------------------------
     def _update_circuit_breaker_state(self, changes: dict[str, dict], poly_probs: dict | None = None) -> None:
-        """v5 서킷브레이커 상태를 업데이트한다.
-
-        구현 범위:
-        - VIX 급등(+6%) 시 7거래일 신규 매수 차단
-        - GLD 급등(+3%) 시 3거래일 신규 매수 차단
-        - BTC 급락(-5%) 시 신규 매수 차단
-        - BTC 급등(+5%) 시 신규 매수 차단
-        - 금리 상승 우려(rate_hike >= 50%) 시 신규 매수 차단
-        - 과열 종목(+20%) 추가 매수 금지
-        - 매도는 계속 허용 (v4와의 핵심 차이)
-        """
         vix_pct = changes.get("VIX", {}).get("change_pct", 0.0)
         gld_pct = changes.get("GLD", {}).get("change_pct", 0.0)
         btc_proxy_pct = changes.get("BITU", {}).get("change_pct", 0.0)
@@ -794,7 +939,6 @@ class BacktestEngineV5:
                 config.V5_CB_VIX_COOLDOWN_DAYS,
             )
 
-        # GLD 급등 트리거 발생 시 쿨다운 리셋
         if gld_pct >= config.V5_CB_GLD_SPIKE_PCT:
             self._cb_gld_cooldown_days = max(
                 self._cb_gld_cooldown_days,
@@ -812,7 +956,7 @@ class BacktestEngineV5:
 
         rate_hike_active = (
             rate_hike_raw is not None
-            and rate_hike_raw != 0.5  # 0.5는 데이터 미확보 기본값으로 취급
+            and rate_hike_raw != 0.5
             and rate_hike_prob_pct >= config.V5_CB_RATE_HIKE_PROB_PCT
         )
         if rate_hike_active:
@@ -831,229 +975,6 @@ class BacktestEngineV5:
             or btc_surge_active
             or rate_hike_active
         )
-
-    # ----------------------------------------------------------
-    # Main loop
-    # ----------------------------------------------------------
-    def run(self, verbose: bool = True) -> "BacktestEngineV5":
-        self._verbose = verbose
-        # ---- 1. Load data ----
-        print("[1/4] 데이터 준비")
-        df = backtest_common.load_parquet(config.DATA_DIR / "backtest_1min_v2.parquet")
-        poly = backtest_common.load_polymarket_daily(config.PROJECT_ROOT / "polymarket" / "history")
-
-        # Pre-index DataFrame for O(1) bar lookup
-        ts_prices, sym_bars, day_timestamps = backtest_common.preindex_dataframe(df)
-        self._prepare_entry_early_metrics(df)
-
-        # ---- 2. Prepare trading dates ----
-        all_dates = sorted(day_timestamps.keys())
-        bt_dates = [d for d in all_dates if self.start_date <= d <= self.end_date]
-        warmup_dates = [d for d in all_dates if d < self.start_date]
-
-        prev_close: dict[str, float] = {}
-        for d in warmup_dates:
-            if d not in sym_bars:
-                continue
-            for ticker, bars in sym_bars[d].items():
-                if bars:
-                    prev_close[ticker] = bars[-1]["close"]
-
-        self.total_trading_days = len(bt_dates)
-        if verbose:
-            print(f"\n[2/4] 시뮬레이션 실행 (v5 선별 매매형)")
-            print(f"  백테스트 기간: {bt_dates[0]} ~ {bt_dates[-1]} ({len(bt_dates)}일)")
-            print(f"  초기 자금: ${self.initial_capital_krw:,.2f}")
-            print(f"  v5 주요 변경: ENTRY {config.V5_PAIR_GAP_ENTRY_THRESHOLD}% | "
-                  f"DCA {config.V5_DCA_MAX_COUNT}회 | "
-                  f"트리거 {config.V5_COIN_TRIGGER_PCT}% | "
-                  f"쿨타임 {config.V5_SPLIT_BUY_INTERVAL_MIN}분 | "
-                  f"횡보장 감지 {'ON' if config.V5_SIDEWAYS_ENABLED else 'OFF'}")
-            print("  통화 단위: USD (환율 변환 미사용)\n")
-
-        # ---- 3. Main day loop ----
-        for day_idx, trading_date in enumerate(bt_dates):
-            if trading_date not in ts_prices:
-                continue
-            day_sym = sym_bars[trading_date]
-            day_ts = day_timestamps[trading_date]
-
-            # (a) Polymarket -> market mode
-            poly_probs = poly.get(trading_date, None)
-
-            # (a-1) CB 쿨다운(거래일 기준) 감소
-            if self._cb_vix_cooldown_days > 0:
-                self._cb_vix_cooldown_days -= 1
-            if self._cb_gld_cooldown_days > 0:
-                self._cb_gld_cooldown_days -= 1
-            if self._cb_rate_leverage_cooldown_days > 0:
-                self._cb_rate_leverage_cooldown_days -= 1
-            self._unix_signal_active_today = self._unix_signal_next_day
-
-            # (b) Reset daily state
-            self._sold_today.clear()
-            self._traded_today.clear()
-            self._gap_fail_count = 0
-            self._trigger_fail_count = 0
-            self._gap_entry_tickers.clear()
-            self._high_vol_hits.clear()
-            self._high_vol_last_above.clear()
-            self._sideways_active = False
-            self._sideways_last_eval = None
-            self._cb_block_new_buys = self._cb_gld_cooldown_days > 0 or self._cb_vix_cooldown_days > 0
-            if "GDXU" in self.positions and self._gdxu_entry_day_idx is None:
-                self._gdxu_entry_day_idx = day_idx
-
-            # (c) Handle carry positions from previous day
-            first_ts_of_day = day_ts[0] if day_ts else None
-            base_mode = signals_v5.determine_market_mode_v5(poly_probs, sideways_active=False)
-            self._handle_carry_positions(day_sym, day_ts, base_mode, prev_close)
-
-            # (d) Determine stop loss threshold
-            if base_mode == "bullish":
-                stop_loss_threshold = config.STOP_LOSS_BULLISH_PCT
-            else:
-                stop_loss_threshold = config.STOP_LOSS_PCT
-
-            # (e) Select coin follow (carry 포지션 있으면 해당 종목 유지)
-            carry_follow = None
-            for cand in ["MSTU", "IRE"]:
-                if cand in self.positions:
-                    carry_follow = cand
-                    break
-            coin_follow = carry_follow if carry_follow else self._select_coin_follow(day_sym, trading_date)
-            today_pairs = {}
-            for pair_key, pair_cfg in config.TWIN_PAIRS_V5.items():
-                if pair_key == "coin":
-                    today_pairs[pair_key] = {
-                        "lead": pair_cfg["lead"],
-                        "follow": [coin_follow],
-                        "label": f"코인 (BTC -> {coin_follow})",
-                    }
-                else:
-                    today_pairs[pair_key] = pair_cfg
-
-            # (f) Process each 1-min bar
-            day_had_sideways = False
-
-            for ts in day_ts:
-                cur_prices = ts_prices[trading_date].get(ts, {})
-
-                changes = backtest_common.calc_changes(cur_prices, prev_close)
-                self._update_high_vol_state(changes)
-
-                # v5: 서킷브레이커 업데이트 (신규 매수 차단만 적용)
-                self._update_circuit_breaker_state(changes, poly_probs)
-
-                # v5: 횡보장 재평가 (30분 간격)
-                self._evaluate_sideways(ts, poly_probs, changes)
-                if self._sideways_active:
-                    day_had_sideways = True
-
-                # 시그널 생성 (v5)
-                sigs = signals_v5.generate_all_signals_v5(
-                    changes,
-                    poly_probs=poly_probs,
-                    pairs=today_pairs,
-                    sideways_active=self._sideways_active,
-                    entry_threshold=config.V5_PAIR_GAP_ENTRY_THRESHOLD,
-                    coin_trigger_pct=config.V5_COIN_TRIGGER_PCT,
-                    coin_sell_profit_pct=config.COIN_SELL_PROFIT_PCT,
-                    coin_sell_bearish_pct=config.COIN_SELL_BEARISH_PCT,
-                    conl_trigger_pct=config.V5_CONL_TRIGGER_PCT,
-                    conl_sell_profit_pct=config.CONL_SELL_PROFIT_PCT,
-                    conl_sell_avg_pct=config.CONL_SELL_AVG_PCT,
-                )
-
-                gold_warning = sigs["gold"]["warning"]
-
-                # v5: 갭 수렴 추적
-                self._track_gap_convergence(sigs)
-
-                # ========== SELL (항상 실행) ==========
-                self._process_sells(
-                    cur_prices, changes, sigs, ts, base_mode,
-                    stop_loss_threshold,
-                )
-
-                # ========== Unix(VIX) defense ==========
-                self._process_unix_defense(ts, cur_prices, day_idx)
-
-                # ========== BUY (횡보장/시간/일일 게이트 적용) ==========
-                self._process_buys(
-                    cur_prices, changes, sigs, ts, base_mode,
-                    gold_warning, today_pairs,
-                )
-
-            # (g) End of day
-            last_prices = {sym: bars[-1]["close"] for sym, bars in day_sym.items() if bars}
-            last_ts = day_ts[-1] if day_ts else None
-
-            if base_mode == "bullish":
-                for ticker, pos in self.positions.items():
-                    if not pos.carry:
-                        pos.carry = True
-            else:
-                for ticker in list(self.positions.keys()):
-                    if ticker in DEFENSE_TICKERS:
-                        continue
-                    price = last_prices.get(ticker)
-                    if price is not None:
-                        self._count_gap_fail_on_sell(ticker, "eod_close")
-                        self._count_trigger_fail_on_sell(ticker, "eod_close")
-                        self._sell_all(ticker, price, last_ts, "eod_close")
-
-            # v5: ENTRY 시그널 발생 후 미수렴 상태 flush (매수 안 된 것 포함)
-            self._flush_gap_entry_eod()
-
-            # Unix(VIX) 일간 신호 계산: 종가 확정 후, 다음 거래일에 적용
-            prev_vix_close = prev_close.get("VIX")
-            cur_vix_close = last_prices.get("VIX")
-            if prev_vix_close and prev_vix_close > 0 and cur_vix_close is not None:
-                self._unix_signal_last_pct = (cur_vix_close / prev_vix_close - 1.0) * 100.0
-                self._unix_signal_next_day = self._unix_signal_last_pct >= config.V5_UNIX_DEFENSE_TRIGGER_PCT
-            else:
-                self._unix_signal_last_pct = 0.0
-                self._unix_signal_next_day = False
-
-            # IAU 금지 트리거: IAU 보유 중 GDXU 일간 -12% 이하
-            iau_ban_triggered = False
-            prev_gdxu_close = prev_close.get("GDXU")
-            cur_gdxu_close = last_prices.get("GDXU")
-            if "IAU" in self.positions and prev_gdxu_close and prev_gdxu_close > 0 and cur_gdxu_close is not None:
-                gdxu_day_pct = (cur_gdxu_close / prev_gdxu_close - 1.0) * 100.0
-                if gdxu_day_pct <= config.V5_IAU_BAN_TRIGGER_GDXU_DROP_PCT:
-                    iau_price = last_prices.get("IAU")
-                    if iau_price is not None:
-                        self._sell_all("IAU", iau_price, last_ts, "iau_ban_trigger")
-                    self._iau_ban_days_remaining = config.V5_IAU_BAN_DURATION_TRADING_DAYS
-                    iau_ban_triggered = True
-
-            # IAU 금지 카운트: 트리거 발생일은 Day0로 카운트 제외
-            if not iau_ban_triggered and self._iau_ban_days_remaining > 0:
-                self._iau_ban_days_remaining -= 1
-
-            prev_close.update(last_prices)
-
-            equity = self._calc_total_equity(cur_prices if last_prices else prev_close)
-            self.equity_curve.append((trading_date, equity))
-
-            if day_had_sideways:
-                self.sideways_days += 1
-
-            if verbose and ((day_idx + 1) % 50 == 0 or day_idx == len(bt_dates) - 1):
-                mode_str = "횡보" if day_had_sideways else base_mode
-                print(
-                    f"  [{day_idx+1:>3}/{len(bt_dates)}] {trading_date}  "
-                    f"자산: ${equity:,.2f}  "
-                    f"현금: ${self.cash_krw:,.2f}  "
-                    f"포지션: {len(self.positions)}개  "
-                    f"모드: {mode_str}"
-                )
-
-        if verbose:
-            print("\n  백테스트 완료!")
-        return self
 
     # ----------------------------------------------------------
     # Carry position handling
@@ -1516,10 +1437,20 @@ class BacktestEngineV5:
                 "exit_time": t.exit_time,
             })
         out_df = pd.DataFrame(rows)
-        out_path = config.DATA_DIR / "backtest_v5_trades.csv"
+        out_path = config.RESULTS_DIR / "backtests" / "backtest_v5_trades.csv"
         out_df.to_csv(out_path, index=False)
         print(f"  거래 로그: {out_path}")
         return out_path
+
+
+# ============================================================
+# Convenience wrapper (backward compatibility)
+# ============================================================
+def run_backtest_v5(**kwargs) -> BacktestEngineV5:
+    """v5 백테스트를 실행하고 엔진을 반환한다."""
+    engine = BacktestEngineV5(**kwargs)
+    engine.run()
+    return engine
 
 
 # ============================================================

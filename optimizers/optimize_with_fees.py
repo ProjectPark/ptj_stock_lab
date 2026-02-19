@@ -7,7 +7,13 @@
 from __future__ import annotations
 
 from datetime import date, timedelta
+import sys
 from pathlib import Path
+
+_ROOT = Path(__file__).resolve().parent.parent
+for _p in [str(_ROOT), str(_ROOT / "backtests"), str(_ROOT / "strategies")]:
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
 
 import numpy as np
 import pandas as pd
@@ -375,7 +381,8 @@ def main():
         df_month_nf.assign(period="1개월", fees="없음"),
         df_month_f.assign(period="1개월", fees="KIS"),
     ])
-    csv_path = config.DATA_DIR / "stoploss_fees_comparison.csv"
+    (config.RESULTS_DIR / "optimization").mkdir(parents=True, exist_ok=True)
+    csv_path = config.RESULTS_DIR / "optimization" / "stoploss_fees_comparison.csv"
     combined.to_csv(csv_path, index=False)
     print(f"  CSV 저장: {csv_path}")
     print()

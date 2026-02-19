@@ -4,26 +4,34 @@ PTJ v2 — Optuna 파라미터 최적화 (개선판)
 ==========================================
 개선점:
   1. Walk-forward: Train(180일) 최적화 → Test(60일) 검증 — 과적합 방지
-  2. 파라미터 축소: 14개 → 5개 (fANOVA 중요도 기반)
+  2. 파라미터 축소: 14개 → 7개 (fANOVA 중요도 기반)
   3. Multi-objective: 수익률 ↑ + MDD ↓ (NSGA-II Pareto front)
 
 Usage:
-    pyenv shell market && python optimize_v2_optuna.py --n-trials 100 --n-jobs 10
+    pyenv shell ptj_stock_lab && python optimizers/optimize_v2_optuna.py --n-trials 100 --n-jobs 10
 """
 from __future__ import annotations
 
 import argparse
 import contextlib
 import multiprocessing as mp
-import os
 import sys
 import time
 from datetime import date
 from io import StringIO
+from pathlib import Path
+from typing import Any
+
+_ROOT = Path(__file__).resolve().parent.parent
+for _p in [str(_ROOT), str(_ROOT / "backtests"), str(_ROOT / "strategies")]:
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
 
 import optuna
 from optuna.samplers import NSGAIISampler
 
+import config
+from optimizers.optimizer_base import BaseOptimizer, TrialResult, extract_metrics_usd
 
 # ── Walk-forward 기간 설정 ─────────────────────────────────────────
 TRAIN_START = date(2025, 2, 18)
@@ -45,91 +53,87 @@ def suppress_stdout():
         sys.stdout = old
 
 
-# ── 탐색 공간 (5개 핵심 파라미터) ──────────────────────────────────
+# ============================================================
+# V2Optimizer
+# ============================================================
 
-def define_search_space(trial: optuna.Trial) -> dict:
-    """확장된 7개 파라미터 탐색 공간."""
-    return {
-        # 조건부 매매 트리거 (확장: 1.0~12.0%)
-        "COIN_TRIGGER_PCT": trial.suggest_float(
-            "COIN_TRIGGER_PCT", 1.0, 12.0, step=0.5
-        ),
-        "CONL_TRIGGER_PCT": trial.suggest_float(
-            "CONL_TRIGGER_PCT", 1.0, 12.0, step=0.5
-        ),
-        # 손절 (확장: -12.0~-1.5%)
-        "STOP_LOSS_PCT": trial.suggest_float(
-            "STOP_LOSS_PCT", -12.0, -1.5, step=0.5
-        ),
-        # 강세장 손절 (신규 추가: -15.0~-5.0%)
-        "STOP_LOSS_BULLISH_PCT": trial.suggest_float(
-            "STOP_LOSS_BULLISH_PCT", -15.0, -5.0, step=0.5
-        ),
-        # DCA 횟수 (확장: 1~15)
-        "DCA_MAX_COUNT": trial.suggest_int(
-            "DCA_MAX_COUNT", 1, 15
-        ),
-        # 쌍둥이 매도 갭 (확장: 0.5~15.0%)
-        "PAIR_GAP_SELL_THRESHOLD_V2": trial.suggest_float(
-            "PAIR_GAP_SELL_THRESHOLD_V2", 0.5, 15.0, step=0.5
-        ),
-        # 시간 손절 (신규 추가: 2~10시간)
-        "MAX_HOLD_HOURS": trial.suggest_int(
-            "MAX_HOLD_HOURS", 2, 10
-        ),
-    }
+
+class V2Optimizer(BaseOptimizer):
+    """v2 Optuna 최적화 (Multi-objective, Walk-forward)."""
+
+    version = "v2"
+
+    def get_baseline_params(self) -> dict:
+        """v2 baseline 파라미터."""
+        return {
+            "COIN_TRIGGER_PCT": config.COIN_TRIGGER_PCT,
+            "CONL_TRIGGER_PCT": config.CONL_TRIGGER_PCT,
+            "STOP_LOSS_PCT": config.STOP_LOSS_PCT,
+            "STOP_LOSS_BULLISH_PCT": config.STOP_LOSS_BULLISH_PCT,
+            "DCA_MAX_COUNT": config.DCA_MAX_COUNT,
+            "PAIR_GAP_SELL_THRESHOLD_V2": config.PAIR_GAP_SELL_THRESHOLD_V2,
+            "MAX_HOLD_HOURS": config.MAX_HOLD_HOURS,
+        }
+
+    def create_engine(self, params: dict, **kwargs) -> Any:
+        """v2 백테스트 엔진 인스턴스를 생성한다."""
+        from backtest_v2 import BacktestEngineV2
+        return BacktestEngineV2(**kwargs)
+
+    def define_search_space(self, trial: optuna.Trial) -> dict:
+        """v2 확장 7개 파라미터 탐색 공간."""
+        return {
+            "COIN_TRIGGER_PCT": trial.suggest_float("COIN_TRIGGER_PCT", 1.0, 12.0, step=0.5),
+            "CONL_TRIGGER_PCT": trial.suggest_float("CONL_TRIGGER_PCT", 1.0, 12.0, step=0.5),
+            "STOP_LOSS_PCT": trial.suggest_float("STOP_LOSS_PCT", -12.0, -1.5, step=0.5),
+            "STOP_LOSS_BULLISH_PCT": trial.suggest_float("STOP_LOSS_BULLISH_PCT", -15.0, -5.0, step=0.5),
+            "DCA_MAX_COUNT": trial.suggest_int("DCA_MAX_COUNT", 1, 15),
+            "PAIR_GAP_SELL_THRESHOLD_V2": trial.suggest_float("PAIR_GAP_SELL_THRESHOLD_V2", 0.5, 15.0, step=0.5),
+            "MAX_HOLD_HOURS": trial.suggest_int("MAX_HOLD_HOURS", 2, 10),
+        }
+
+    def run_single_trial_usd(self, params: dict, start_date=None, end_date=None) -> TrialResult:
+        """v2 USD 기반 백테스트 1회를 실행한다."""
+        import config as _config
+        from backtest_v2 import BacktestEngineV2
+
+        originals = {}
+        for key, value in params.items():
+            originals[key] = getattr(_config, key)
+            setattr(_config, key, value)
+
+        try:
+            with suppress_stdout():
+                engine_kwargs = {}
+                if start_date:
+                    engine_kwargs["start_date"] = start_date
+                if end_date:
+                    engine_kwargs["end_date"] = end_date
+                engine = BacktestEngineV2(**engine_kwargs)
+                engine.run(verbose=False)
+            return extract_metrics_usd(engine)
+        finally:
+            for key, value in originals.items():
+                setattr(_config, key, value)
 
 
 # ── Objective (Train 기간만 평가) ──────────────────────────────────
 
 def objective(trial: optuna.Trial) -> tuple[float, float]:
-    """Multi-objective: (수익률 maximize, MDD minimize).
+    """Multi-objective: (수익률 maximize, MDD minimize)."""
+    opt = V2Optimizer()
+    params = opt.define_search_space(trial)
+    result = opt.run_single_trial_usd(params, start_date=TRAIN_START, end_date=TRAIN_END)
 
-    Train 기간에서만 평가하여 과적합을 방지한다.
-    """
-    import config
-    import backtest_common
-    from backtest_v2 import BacktestEngineV2
+    trial.set_user_attr("train_return", round(result.total_return_pct, 2))
+    trial.set_user_attr("train_mdd", round(result.mdd, 2))
+    trial.set_user_attr("final_equity", round(result.final_equity, 2))
+    trial.set_user_attr("total_fees", round(result.total_fees, 2))
+    trial.set_user_attr("total_sells", result.total_sells)
+    trial.set_user_attr("stop_loss_count", result.stop_loss_count)
+    trial.set_user_attr("sharpe", round(result.sharpe, 4))
 
-    params = define_search_space(trial)
-
-    originals = {}
-    for key, value in params.items():
-        originals[key] = getattr(config, key)
-        setattr(config, key, value)
-
-    try:
-        with suppress_stdout():
-            engine = BacktestEngineV2(
-                start_date=TRAIN_START,
-                end_date=TRAIN_END,
-            )
-            engine.run(verbose=False)
-
-        initial = engine.initial_capital_usd
-        final = engine.equity_curve[-1][1] if engine.equity_curve else initial
-        train_ret = (final - initial) / initial * 100
-        train_mdd = backtest_common.calc_mdd(engine.equity_curve)
-        sharpe = backtest_common.calc_sharpe(engine.equity_curve)
-        total_fees = engine.total_buy_fees_usd + engine.total_sell_fees_usd
-
-        sells = [t for t in engine.trades if t.side == "SELL"]
-        stop_losses = [t for t in sells if t.exit_reason == "stop_loss"]
-
-        trial.set_user_attr("train_return", round(train_ret, 2))
-        trial.set_user_attr("train_mdd", round(train_mdd, 2))
-        trial.set_user_attr("final_equity", round(final, 2))
-        trial.set_user_attr("total_fees", round(total_fees, 2))
-        trial.set_user_attr("total_sells", len(sells))
-        trial.set_user_attr("stop_loss_count", len(stop_losses))
-        trial.set_user_attr("sharpe", round(sharpe, 4))
-
-        # directions=["maximize", "minimize"] → return ↑, MDD ↓
-        return (train_ret, train_mdd)
-
-    finally:
-        for key, value in originals.items():
-            setattr(config, key, value)
+    return (result.total_return_pct, result.mdd)
 
 
 # ── 워커 프로세스 ──────────────────────────────────────────────────
@@ -150,11 +154,7 @@ def _worker_process(
 # ── Pareto front 최적해 선택 ──────────────────────────────────────
 
 def select_best_trial(pareto_trials: list) -> optuna.trial.FrozenTrial | None:
-    """Pareto front에서 균형 잡힌 최적해를 선택한다.
-
-    Score = 수익률 - 0.5 * MDD
-    수익률을 중시하되 과도한 낙폭에 페널티를 준다.
-    """
+    """Pareto front에서 균형 잡힌 최적해를 선택한다."""
     if not pareto_trials:
         return None
     best = None
@@ -172,75 +172,29 @@ def select_best_trial(pareto_trials: list) -> optuna.trial.FrozenTrial | None:
 # ── Test 기간 검증 ─────────────────────────────────────────────────
 
 def validate_on_test(params: dict) -> dict:
-    """최적 파라미터로 Test 기간 백테스트를 1회 실행한다 (out-of-sample)."""
-    import config
-    import backtest_common
-    from backtest_v2 import BacktestEngineV2
-
-    originals = {}
-    for key, value in params.items():
-        originals[key] = getattr(config, key)
-        setattr(config, key, value)
-
-    try:
-        with suppress_stdout():
-            engine = BacktestEngineV2(
-                start_date=TEST_START,
-                end_date=TEST_END,
-            )
-            engine.run(verbose=False)
-
-        initial = engine.initial_capital_usd
-        final = engine.equity_curve[-1][1] if engine.equity_curve else initial
-        test_ret = (final - initial) / initial * 100
-        test_mdd = backtest_common.calc_mdd(engine.equity_curve)
-        sharpe = backtest_common.calc_sharpe(engine.equity_curve)
-        total_fees = engine.total_buy_fees_usd + engine.total_sell_fees_usd
-        sells = [t for t in engine.trades if t.side == "SELL"]
-        stop_losses = [t for t in sells if t.exit_reason == "stop_loss"]
-
-        return {
-            "test_return": round(test_ret, 2),
-            "test_mdd": round(test_mdd, 2),
-            "final_equity": round(final, 2),
-            "total_fees": round(total_fees, 2),
-            "total_sells": len(sells),
-            "stop_loss_count": len(stop_losses),
-            "sharpe": round(sharpe, 4),
-        }
-    finally:
-        for key, value in originals.items():
-            setattr(config, key, value)
+    """최적 파라미터로 Test 기간 백테스트를 1회 실행한다."""
+    opt = V2Optimizer()
+    result = opt.run_single_trial_usd(params, start_date=TEST_START, end_date=TEST_END)
+    return {
+        "test_return": round(result.total_return_pct, 2),
+        "test_mdd": round(result.mdd, 2),
+        "final_equity": round(result.final_equity, 2),
+        "total_fees": round(result.total_fees, 2),
+        "total_sells": result.total_sells,
+        "stop_loss_count": result.stop_loss_count,
+        "sharpe": round(result.sharpe, 4),
+    }
 
 
 def run_full_period(params: dict) -> dict:
     """최적 파라미터로 전체 기간 백테스트를 실행한다."""
-    import config
-    import backtest_common
-    from backtest_v2 import BacktestEngineV2
-
-    originals = {}
-    for key, value in params.items():
-        originals[key] = getattr(config, key)
-        setattr(config, key, value)
-
-    try:
-        with suppress_stdout():
-            engine = BacktestEngineV2(
-                start_date=TRAIN_START,
-                end_date=TEST_END,
-            )
-            engine.run(verbose=False)
-
-        initial = engine.initial_capital_usd
-        final = engine.equity_curve[-1][1] if engine.equity_curve else initial
-        ret = (final - initial) / initial * 100
-        mdd = backtest_common.calc_mdd(engine.equity_curve)
-
-        return {"return": round(ret, 2), "mdd": round(mdd, 2), "final_equity": round(final, 2)}
-    finally:
-        for key, value in originals.items():
-            setattr(config, key, value)
+    opt = V2Optimizer()
+    result = opt.run_single_trial_usd(params, start_date=TRAIN_START, end_date=TEST_END)
+    return {
+        "return": round(result.total_return_pct, 2),
+        "mdd": round(result.mdd, 2),
+        "final_equity": round(result.final_equity, 2),
+    }
 
 
 # ── 결과 출력 ───────────────────────────────────────────────────────
@@ -259,7 +213,6 @@ def print_results(study: optuna.Study) -> None:
         print("  완료된 trial이 없습니다.")
         return
 
-    # ── Pareto front ──
     pareto = study.best_trials
     print(f"  Pareto front: {len(pareto)}개 해")
 
@@ -268,7 +221,6 @@ def print_results(study: optuna.Study) -> None:
         print("  Pareto front이 비어 있습니다.")
         return
 
-    # ── Best Trial (Train) ──
     print(f"\n{'─' * 70}")
     print(f"  BEST Trial #{best.number}  (Train: {TRAIN_START} ~ {TRAIN_END})")
     print(f"{'─' * 70}")
@@ -287,7 +239,6 @@ def print_results(study: optuna.Study) -> None:
         else:
             print(f"    {key:40s} = {value:.2f}")
 
-    # ── Test 검증 (out-of-sample, 1회만 실행) ──
     print(f"\n{'─' * 70}")
     print(f"  Walk-forward 검증  (Test: {TEST_START} ~ {TEST_END})")
     print(f"{'─' * 70}")
@@ -309,7 +260,6 @@ def print_results(study: optuna.Study) -> None:
     else:
         print(f"  >> 수용 가능한 범위")
 
-    # ── 전체 기간 비교 ──
     print(f"\n{'─' * 70}")
     print(f"  전체 기간 비교  ({TRAIN_START} ~ {TEST_END})")
     print(f"{'─' * 70}")
@@ -320,7 +270,6 @@ def print_results(study: optuna.Study) -> None:
     print(f"  최적화 MDD     : -{full['mdd']:.2f}%")
     print(f"  개선           : {full['return'] - baseline_ret:+.2f}pp")
 
-    # ── Pareto Front Top 10 ──
     scored = [(t, t.values[0] - 0.5 * t.values[1]) for t in pareto]
     scored.sort(key=lambda x: -x[1])
     top10 = scored[:10]
@@ -340,7 +289,6 @@ def print_results(study: optuna.Study) -> None:
             f"  {t.user_attrs.get('stop_loss_count', 0):>4d}"
         )
 
-    # ── config.py 복사용 ──
     print(f"\n{'─' * 70}")
     print(f"  config.py 적용 코드 (복사용)")
     print(f"{'─' * 70}")
@@ -370,7 +318,7 @@ def main():
     if args.db:
         storage_url = args.db
     else:
-        db_path = os.path.join(os.path.dirname(__file__), "data", "optuna_v2.db")
+        db_path = str(config.OPTUNA_DIR / "optuna_v2.db")
         storage_url = f"sqlite:///{db_path}"
 
     n_jobs = max(1, args.n_jobs)
@@ -390,7 +338,7 @@ def main():
     sampler = NSGAIISampler(seed=42, population_size=50)
     study = optuna.create_study(
         study_name=args.study_name,
-        directions=["maximize", "minimize"],  # 수익률 ↑, MDD ↓
+        directions=["maximize", "minimize"],
         sampler=sampler,
         storage=storage_url,
         load_if_exists=True,

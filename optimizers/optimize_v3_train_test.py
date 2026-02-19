@@ -5,26 +5,27 @@ PTJ v3 — Train/Test 분리 최적화
 Train 기간에서 파라미터 최적화 후 Test 기간에서 검증
 
 Usage:
-    pyenv shell market && python optimize_v3_train_test.py --n-trials 300 --n-jobs 10
+    pyenv shell ptj_stock_lab && python optimizers/optimize_v3_train_test.py --n-trials 300 --n-jobs 10
 """
 from __future__ import annotations
 
 import argparse
-import json
 import subprocess
 import sys
 import time
 from datetime import date, datetime
 from pathlib import Path
 
+_ROOT = Path(__file__).resolve().parent.parent
+for _p in [str(_ROOT), str(_ROOT / "backtests"), str(_ROOT / "strategies")]:
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
+
 import optuna
 from optuna.samplers import TPESampler
 
-# ── 경로 상수 ─────────────────────────────────────────────────
-
-DOCS_DIR = Path(__file__).resolve().parent / "docs"
-DATA_DIR = Path(__file__).resolve().parent / "data"
-TRAIN_TEST_REPORT = DOCS_DIR / "v3_train_test_report.md"
+import config
+from optimizers.optimizer_base import BaseOptimizer, TrialResult, extract_metrics
 
 # ── Train/Test 기간 설정 ──────────────────────────────────────
 
@@ -33,79 +34,32 @@ TRAIN_END = date(2025, 12, 31)
 TEST_START = date(2026, 1, 1)
 TEST_END = date(2026, 2, 17)
 
+# ── 리포트 경로 ────────────────────────────────────────────────
 
-# ── 백테스트 실행 함수 ─────────────────────────────────────────
-
-def _run_backtest(params: dict, start_date: date, end_date: date) -> dict:
-    """지정된 기간에 대해 백테스트를 실행하고 결과를 반환한다."""
-    import config
-    import backtest_common
-    from backtest_v3 import BacktestEngineV3
-
-    # 파라미터 임시 적용
-    originals = {}
-    for key, value in params.items():
-        if hasattr(config, key):
-            originals[key] = getattr(config, key)
-            setattr(config, key, value)
-
-    try:
-        engine = BacktestEngineV3(start_date=start_date, end_date=end_date)
-        engine.run(verbose=False)
-
-        initial = engine.initial_capital_krw
-        final = engine.equity_curve[-1][1] if engine.equity_curve else initial
-        total_ret = (final - initial) / initial * 100
-        mdd = backtest_common.calc_mdd(engine.equity_curve)
-        sharpe = backtest_common.calc_sharpe(engine.equity_curve)
-
-        # 매수/매도 카운트
-        buys = [t for t in engine.trades if t.side == "BUY"]
-        sells = [t for t in engine.trades if t.side == "SELL"]
-
-        # 승률 계산 (매도 기준)
-        win_count = sum(1 for t in sells if t.pnl_pct > 0)
-        total_sells = len(sells)
-        win_rate = (win_count / total_sells * 100) if total_sells > 0 else 0
-
-        # 손절 카운트
-        stop_loss_count = sum(1 for t in sells if "손절" in t.exit_reason)
-        time_stop_count = sum(1 for t in sells if "시간" in t.exit_reason)
-
-        return {
-            "return_pct": total_ret,
-            "mdd": mdd,
-            "sharpe": sharpe,
-            "win_rate": win_rate,
-            "total_buys": len(buys),
-            "total_sells": total_sells,
-            "total_trades": total_sells,  # backward compat
-            "stop_loss_count": stop_loss_count,
-            "time_stop_count": time_stop_count,
-            "sideways_days": engine.sideways_days,
-        }
-    finally:
-        # 원래 값 복원
-        for key, value in originals.items():
-            setattr(config, key, value)
+DOCS_DIR = Path(__file__).resolve().parent / "docs"
+TRAIN_TEST_REPORT = DOCS_DIR / "v3_train_test_report.md"
 
 
-# ── Optuna Objective ──────────────────────────────────────────
+# ── TrainTestObjective ─────────────────────────────────────────
 
 
 class TrainTestObjective:
-    """Train 기간에서 최적화, Test 기간에서 검증 (매 Trial마다)."""
+    """Train 기간에서 최적화, Test 기간에서 검증 (매 Trial마다).
+
+    BaseOptimizer.run_single_trial()을 사용하여 config setattr/restore
+    패턴을 공유한다.
+    """
 
     def __init__(self, gap_max: float = 10.0):
         self.gap_max = gap_max
         self.trial_count = 0
+        # V3Optimizer를 임포트하여 run_single_trial 재사용
+        from optimizers.optimize_v3_optuna import V3Optimizer
+        self._optimizer = V3Optimizer(gap_max=gap_max)
 
-    def __call__(self, trial: optuna.Trial) -> float:
-        """Train 기간 수익률을 반환 (최대화 목표). Test 결과는 user_attrs에 저장."""
-        self.trial_count += 1
-
-        # 넓은 범위 탐색 (과최적화 방지)
-        params = {
+    def _define_wide_search_space(self, trial: optuna.Trial) -> dict:
+        """넓은 범위 탐색 공간 (과최적화 방지)."""
+        return {
             # GAP 임계값: 매우 넓은 범위
             "V3_PAIR_GAP_ENTRY_THRESHOLD": trial.suggest_float(
                 "V3_PAIR_GAP_ENTRY_THRESHOLD", 1.0, self.gap_max, step=0.5
@@ -182,34 +136,42 @@ class TrainTestObjective:
             ),
         }
 
+    def __call__(self, trial: optuna.Trial) -> float:
+        """Train 기간 수익률을 반환 (최대화 목표). Test 결과는 user_attrs에 저장."""
+        self.trial_count += 1
+
+        params = self._define_wide_search_space(trial)
+
         # Train 기간 평가 (최적화 목표)
-        train_result = _run_backtest(params, TRAIN_START, TRAIN_END)
+        train_result = self._optimizer.run_single_trial(
+            params, start_date=TRAIN_START, end_date=TRAIN_END
+        )
 
         # Test 기간 평가 (검증용)
-        test_result = _run_backtest(params, TEST_START, TEST_END)
+        test_result = self._optimizer.run_single_trial(
+            params, start_date=TEST_START, end_date=TEST_END
+        )
 
         # Test 결과를 trial attributes에 저장
-        trial.set_user_attr("test_return", test_result["return_pct"])
-        trial.set_user_attr("test_mdd", test_result["mdd"])
-        trial.set_user_attr("test_sharpe", test_result["sharpe"])
-        trial.set_user_attr("test_win_rate", test_result["win_rate"])
-        trial.set_user_attr("train_return", train_result["return_pct"])
-        degradation = train_result["return_pct"] - test_result["return_pct"]
+        trial.set_user_attr("test_return", test_result.total_return_pct)
+        trial.set_user_attr("test_mdd", test_result.mdd)
+        trial.set_user_attr("test_sharpe", test_result.sharpe)
+        trial.set_user_attr("test_win_rate", test_result.win_rate)
+        trial.set_user_attr("train_return", train_result.total_return_pct)
+        degradation = train_result.total_return_pct - test_result.total_return_pct
         trial.set_user_attr("degradation", degradation)
 
         # 매 Trial마다 Train/Test 결과 출력
-        import sys
-
         print(
             f"[T{trial.number:3d}] "
-            f"Train: {train_result['return_pct']:+6.2f}% | "
-            f"Test: {test_result['return_pct']:+6.2f}% | "
+            f"Train: {train_result.total_return_pct:+6.2f}% | "
+            f"Test: {test_result.total_return_pct:+6.2f}% | "
             f"차이: {degradation:+5.2f}%p",
             flush=True,
         )
         sys.stdout.flush()
 
-        return train_result["return_pct"]
+        return train_result.total_return_pct
 
 
 # ── 메인 실행 ────────────────────────────────────────────────
@@ -226,7 +188,7 @@ def main():
     parser.add_argument(
         "--db",
         type=str,
-        default="sqlite:///data/optuna_v3_train_test.db",
+        default=f"sqlite:///{config.OPTUNA_DIR / 'optuna_v3_train_test.db'}",
         help="Optuna DB",
     )
     args = parser.parse_args()
@@ -344,11 +306,12 @@ study.optimize(objective, n_trials={n_trials // n_jobs + 1}, show_progress_bar=F
     print(f"  성능 차이:   {degradation:+.2f}%p")
     print()
 
-    # Train 기간 상세 결과 (재실행)
-    train_result = _run_backtest(best_params, TRAIN_START, TRAIN_END)
+    # Train/Test 기간 상세 결과 (재실행 via run_single_trial)
+    from optimizers.optimize_v3_optuna import V3Optimizer
+    opt = V3Optimizer(gap_max=gap_max)
 
-    # Test 기간 상세 결과 (재실행)
-    test_result = _run_backtest(best_params, TEST_START, TEST_END)
+    train_result = opt.run_single_trial(best_params, start_date=TRAIN_START, end_date=TRAIN_END)
+    test_result = opt.run_single_trial(best_params, start_date=TEST_START, end_date=TEST_END)
 
     # Top 5 trials 정보 (이미 계산된 Test 결과 사용)
     completed_trials = [t for t in study.trials if t.state == optuna.trial.TrialState.COMPLETE]
@@ -368,8 +331,8 @@ study.optimize(objective, n_trials={n_trials // n_jobs + 1}, show_progress_bar=F
 
     # 리포트 생성
     _generate_report(
-        train_result=train_result,
-        test_result=test_result,
+        train_result=train_result.to_dict(),
+        test_result=test_result.to_dict(),
         best_params=best_params,
         best_trial_number=best_trial.number,
         top_test_results=top_test_results,
@@ -401,7 +364,7 @@ def _generate_report(
         "",
         "---",
         "",
-        "## 📊 데이터 기간",
+        "## 데이터 기간",
         "",
         "| 구분 | 기간 | 용도 |",
         "|---|---|---|",
@@ -425,7 +388,7 @@ def _generate_report(
         "",
         "| 지표 | Train | Test | 차이 |",
         "|---|---|---|---|",
-        f"| **수익률** | **{train_result['return_pct']:+.2f}%** | **{test_result['return_pct']:+.2f}%** | {test_result['return_pct'] - train_result['return_pct']:+.2f}%p |",
+        f"| **수익률** | **{train_result['total_return_pct']:+.2f}%** | **{test_result['total_return_pct']:+.2f}%** | {test_result['total_return_pct'] - train_result['total_return_pct']:+.2f}%p |",
         f"| MDD | {train_result['mdd']:.2f}% | {test_result['mdd']:.2f}% | {test_result['mdd'] - train_result['mdd']:+.2f}%p |",
         f"| Sharpe | {train_result['sharpe']:.4f} | {test_result['sharpe']:.4f} | {test_result['sharpe'] - train_result['sharpe']:+.4f} |",
         f"| 승률 | {train_result['win_rate']:.1f}% | {test_result['win_rate']:.1f}% | {test_result['win_rate'] - train_result['win_rate']:+.1f}%p |",
@@ -434,21 +397,21 @@ def _generate_report(
         f"| 손절 횟수 | {train_result['stop_loss_count']} | {test_result['stop_loss_count']} | - |",
         f"| 횡보일 | {train_result['sideways_days']} | {test_result['sideways_days']} | - |",
         "",
-        "### 📈 과최적화 평가",
+        "### 과최적화 평가",
         "",
     ]
 
     # 과최적화 평가
-    train_ret = train_result["return_pct"]
-    test_ret = test_result["return_pct"]
+    train_ret = train_result["total_return_pct"]
+    test_ret = test_result["total_return_pct"]
     degradation = train_ret - test_ret
 
     if degradation < 2:
-        verdict = "✅ **우수**: Test 성능이 Train과 유사 → 강건한 전략"
+        verdict = "**우수**: Test 성능이 Train과 유사 -- 강건한 전략"
     elif degradation < 5:
-        verdict = "⚠️ **주의**: Test 성능이 소폭 하락 → 모니터링 필요"
+        verdict = "**주의**: Test 성능이 소폭 하락 -- 모니터링 필요"
     else:
-        verdict = "❌ **과최적화**: Test 성능이 크게 하락 → 파라미터 재조정 권장"
+        verdict = "**과최적화**: Test 성능이 크게 하락 -- 파라미터 재조정 권장"
 
     lines.extend(
         [
@@ -498,16 +461,16 @@ def _generate_report(
             "",
             "## 5. 결론",
             "",
-            "### ✅ 강점",
+            "### 강점",
             f"- Train 기간 수익률: **{train_ret:+.2f}%**",
             f"- Test 기간 검증: **{test_ret:+.2f}%**",
             f"- Out-of-Sample 검증 완료",
             "",
-            "### ⚠️ 주의사항",
-            "- Test 기간이 짧음 (약 1.5개월) → 추가 검증 권장",
+            "### 주의사항",
+            "- Test 기간이 짧음 (약 1.5개월) -- 추가 검증 권장",
             "- 시장 환경 변화에 따른 전략 재조정 필요",
             "",
-            "### 📋 다음 단계",
+            "### 다음 단계",
             "1. 2026년 2월 18일 이후 데이터로 Forward Test",
             "2. 파라미터 민감도 분석",
             "3. Paper Trading 1개월 실시",

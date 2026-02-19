@@ -6,8 +6,16 @@ app.py에서 import만 바꾸면 전환 완료.
 """
 from __future__ import annotations
 
+import sys
 import logging
 from datetime import datetime
+from pathlib import Path
+
+_ROOT = Path(__file__).resolve().parent.parent
+_FETCHERS = Path(__file__).resolve().parent
+for _p in [str(_ROOT), str(_FETCHERS)]:
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
 
 import pandas as pd
 

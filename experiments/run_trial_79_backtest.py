@@ -4,7 +4,15 @@ Trial #79 파라미터로 상세 백테스트 실행
 Train/Test 양 기간에 대한 상세 지표 출력
 """
 
+import sys
 from datetime import date
+from pathlib import Path
+
+_ROOT = Path(__file__).resolve().parent.parent
+for _p in [str(_ROOT), str(_ROOT / "backtests"), str(_ROOT / "strategies")]:
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
+
 import config
 import backtest_common
 from backtest_v3 import BacktestEngineV3

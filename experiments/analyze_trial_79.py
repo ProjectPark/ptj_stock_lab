@@ -1,14 +1,21 @@
 #!/usr/bin/env python3
 """Trial #79 상세 분석 스크립트"""
 
-import optuna
+import sys
 import json
 from pathlib import Path
+
+_ROOT = Path(__file__).resolve().parent.parent
+if str(_ROOT) not in sys.path:
+    sys.path.insert(0, str(_ROOT))
+
+import config
+import optuna
 
 # Optuna study 로드
 study = optuna.load_study(
     study_name="ptj_v3_train_test",
-    storage="sqlite:///optuna_v3_train_test.db"
+    storage=f"sqlite:///{config.OPTUNA_DIR / 'optuna_v3_train_test.db'}"
 )
 
 # Trial #79 조회

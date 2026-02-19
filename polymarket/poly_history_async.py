@@ -34,6 +34,7 @@ from polymarket.poly_config import (
     INDICATORS,
     SlugType,
 )
+from polymarket.poly_common import MONTH_NUM, extract_final_prices
 from polymarket.poly_fetcher import build_slug
 from polymarket.poly_history import HISTORY_DIR, extract_token_ids
 
@@ -230,14 +231,9 @@ async def _search_fomc_slug_async(
     """FOMC 활성 이벤트 slug 탐색 (비동기)."""
     from polymarket.poly_config import FOMC_MONTHS
 
-    month_num = {
-        "january": 1, "february": 2, "march": 3, "april": 4,
-        "may": 5, "june": 6, "july": 7, "august": 8,
-        "september": 9, "october": 10, "november": 11, "december": 12,
-    }
     start_idx = 0
     for i, m in enumerate(FOMC_MONTHS):
-        if month_num.get(m, 0) >= ref_date.month:
+        if MONTH_NUM.get(m, 0) >= ref_date.month:
             start_idx = i
             break
 
@@ -484,12 +480,7 @@ def assemble_and_save(
                 continue
 
             # 최종 가격
-            final_prices = {}
-            for market in event.get("markets", []):
-                outcomes = json.loads(market.get("outcomes", "[]"))
-                prices = json.loads(market.get("outcomePrices", "[]"))
-                for i in range(min(len(outcomes), len(prices))):
-                    final_prices[outcomes[i]] = prices[i]
+            final_prices = extract_final_prices(event)
 
             # 마켓별 히스토리 조립
             markets_data = []

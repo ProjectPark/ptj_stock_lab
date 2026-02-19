@@ -1,0 +1,2494 @@
+{
+  "di_surge": {
+    "original": {
+      "train": {
+        "total_pnl": 62578859,
+        "total_n": 27,
+        "total_wr": 51.9,
+        "tickers": {
+          "IREN": {
+            "n": 9,
+            "pnl": 29719114,
+            "wr": 66.7,
+            "avg": 42.96,
+            "trades": [
+              {
+                "date": "2023-12-21",
+                "entry": 4.08,
+                "exit": 7.68,
+                "pnl_pct": 88.15,
+                "held": 66,
+                "layers": 3,
+                "pnl_krw": 6340508
+              },
+              {
+                "date": "2024-04-15",
+                "entry": 5.78,
+                "exit": 4.33,
+                "pnl_pct": -25.14,
+                "held": 67,
+                "layers": 3,
+                "pnl_krw": -1808202
+              },
+              {
+                "date": "2024-06-06",
+                "entry": 5.68,
+                "exit": 10.27,
+                "pnl_pct": 80.77,
+                "held": 22,
+                "layers": 3,
+                "pnl_krw": 5809537
+              },
+              {
+                "date": "2024-12-16",
+                "entry": 9.0,
+                "exit": 13.91,
+                "pnl_pct": 54.58,
+                "held": 90,
+                "layers": 3,
+                "pnl_krw": 3925636
+              },
+              {
+                "date": "2025-02-25",
+                "entry": 12.36,
+                "exit": 8.78,
+                "pnl_pct": -28.98,
+                "held": 50,
+                "layers": 2,
+                "pnl_krw": -1476395
+              },
+              {
+                "date": "2025-04-08",
+                "entry": 7.69,
+                "exit": 5.3,
+                "pnl_pct": -31.08,
+                "held": 15,
+                "layers": 1,
+                "pnl_krw": -931447
+              },
+              {
+                "date": "2025-06-25",
+                "entry": 6.57,
+                "exit": 11.87,
+                "pnl_pct": 80.65,
+                "held": 64,
+                "layers": 3,
+                "pnl_krw": 5801073
+              },
+              {
+                "date": "2025-09-10",
+                "entry": 17.94,
+                "exit": 33.63,
+                "pnl_pct": 87.47,
+                "held": 69,
+                "layers": 3,
+                "pnl_krw": 6291296
+              },
+              {
+                "date": "2025-10-14",
+                "entry": 38.61,
+                "exit": 69.56,
+                "pnl_pct": 80.18,
+                "held": 32,
+                "layers": 3,
+                "pnl_krw": 5767108
+              }
+            ]
+          },
+          "CONL": {
+            "n": 13,
+            "pnl": 11432536,
+            "wr": 30.8,
+            "avg": 8.01,
+            "trades": [
+              {
+                "date": "2023-11-28",
+                "entry": 11.69,
+                "exit": 21.97,
+                "pnl_pct": 87.94,
+                "held": 53,
+                "layers": 3,
+                "pnl_krw": 6325657
+              },
+              {
+                "date": "2024-02-05",
+                "entry": 24.97,
+                "exit": 17.47,
+                "pnl_pct": -30.06,
+                "held": 66,
+                "layers": 3,
+                "pnl_krw": -2161901
+              },
+              {
+                "date": "2024-02-26",
+                "entry": 24.32,
+                "exit": 43.99,
+                "pnl_pct": 80.9,
+                "held": 18,
+                "layers": 3,
+                "pnl_krw": 5819174
+              },
+              {
+                "date": "2024-05-10",
+                "entry": 54.65,
+                "exit": 40.34,
+                "pnl_pct": -26.18,
+                "held": 73,
+                "layers": 3,
+                "pnl_krw": -1882973
+              },
+              {
+                "date": "2024-08-01",
+                "entry": 53.47,
+                "exit": 39.16,
+                "pnl_pct": -26.76,
+                "held": 73,
+                "layers": 3,
+                "pnl_krw": -1924697
+              },
+              {
+                "date": "2024-11-08",
+                "entry": 24.99,
+                "exit": 48.62,
+                "pnl_pct": 94.58,
+                "held": 50,
+                "layers": 3,
+                "pnl_krw": 6803028
+              },
+              {
+                "date": "2024-11-14",
+                "entry": 67.81,
+                "exit": 49.33,
+                "pnl_pct": -27.25,
+                "held": 3,
+                "layers": 1,
+                "pnl_krw": -816761
+              },
+              {
+                "date": "2024-12-18",
+                "entry": 61.88,
+                "exit": 45.63,
+                "pnl_pct": -26.26,
+                "held": 33,
+                "layers": 2,
+                "pnl_krw": -1337994
+              },
+              {
+                "date": "2025-02-20",
+                "entry": 46.96,
+                "exit": 34.75,
+                "pnl_pct": -26.0,
+                "held": 45,
+                "layers": 1,
+                "pnl_krw": -779245
+              },
+              {
+                "date": "2025-03-28",
+                "entry": 19.51,
+                "exit": 14.14,
+                "pnl_pct": -27.52,
+                "held": 4,
+                "layers": 1,
+                "pnl_krw": -824905
+              },
+              {
+                "date": "2025-06-20",
+                "entry": 18.91,
+                "exit": 36.56,
+                "pnl_pct": 93.34,
+                "held": 59,
+                "layers": 3,
+                "pnl_krw": 6713923
+              },
+              {
+                "date": "2025-08-01",
+                "entry": 50.73,
+                "exit": 34.79,
+                "pnl_pct": -31.42,
+                "held": 30,
+                "layers": 3,
+                "pnl_krw": -2259720
+              },
+              {
+                "date": "2025-11-06",
+                "entry": 38.91,
+                "exit": 26.79,
+                "pnl_pct": -31.16,
+                "held": 56,
+                "layers": 3,
+                "pnl_krw": -2241050
+              }
+            ]
+          },
+          "PTIR": {
+            "n": 5,
+            "pnl": 21427209,
+            "wr": 80.0,
+            "avg": 57.13,
+            "trades": [
+              {
+                "date": "2024-11-15",
+                "entry": 3.34,
+                "exit": 6.59,
+                "pnl_pct": 97.54,
+                "held": 28,
+                "layers": 3,
+                "pnl_krw": 7016114
+              },
+              {
+                "date": "2025-02-04",
+                "entry": 6.53,
+                "exit": 14.5,
+                "pnl_pct": 121.92,
+                "held": 77,
+                "layers": 3,
+                "pnl_krw": 8769212
+              },
+              {
+                "date": "2025-04-03",
+                "entry": 11.16,
+                "exit": 8.24,
+                "pnl_pct": -26.18,
+                "held": 10,
+                "layers": 1,
+                "pnl_krw": -784742
+              },
+              {
+                "date": "2025-07-16",
+                "entry": 12.3,
+                "exit": 22.39,
+                "pnl_pct": 82.02,
+                "held": 84,
+                "layers": 3,
+                "pnl_krw": 5899511
+              },
+              {
+                "date": "2025-10-15",
+                "entry": 26.69,
+                "exit": 29.45,
+                "pnl_pct": 10.35,
+                "held": 90,
+                "layers": 2,
+                "pnl_krw": 527114
+              }
+            ]
+          }
+        }
+      },
+      "oos": {
+        "total_pnl": -869049,
+        "total_n": 1,
+        "total_wr": 0.0,
+        "tickers": {
+          "IREN": {
+            "n": 0,
+            "pnl": 0,
+            "wr": 0,
+            "avg": 0,
+            "trades": []
+          },
+          "CONL": {
+            "n": 1,
+            "pnl": -869049,
+            "wr": 0.0,
+            "avg": -29.0,
+            "trades": [
+              {
+                "date": "2026-01-23",
+                "entry": 18.45,
+                "exit": 13.1,
+                "pnl_pct": -29.0,
+                "held": 18,
+                "layers": 1,
+                "pnl_krw": -869049
+              }
+            ]
+          },
+          "PTIR": {
+            "n": 0,
+            "pnl": 0,
+            "wr": 0,
+            "avg": 0,
+            "trades": []
+          }
+        }
+      }
+    },
+    "conservative": {
+      "train": {
+        "total_pnl": 20613625,
+        "total_n": 12,
+        "total_wr": 83.3,
+        "tickers": {
+          "IREN": {
+            "n": 4,
+            "pnl": 3549717,
+            "wr": 75.0,
+            "avg": 21.78,
+            "trades": [
+              {
+                "date": "2024-11-18",
+                "entry": 9.47,
+                "exit": 10.25,
+                "pnl_pct": 8.18,
+                "held": 45,
+                "layers": 2,
+                "pnl_krw": 403081
+              },
+              {
+                "date": "2025-06-18",
+                "entry": 6.88,
+                "exit": 9.8,
+                "pnl_pct": 42.42,
+                "held": 43,
+                "layers": 2,
+                "pnl_krw": 2089218
+              },
+              {
+                "date": "2025-07-03",
+                "entry": 10.47,
+                "exit": 16.82,
+                "pnl_pct": 60.65,
+                "held": 13,
+                "layers": 1,
+                "pnl_krw": 1757076
+              },
+              {
+                "date": "2025-11-13",
+                "entry": 64.14,
+                "exit": 48.65,
+                "pnl_pct": -24.15,
+                "held": 31,
+                "layers": 1,
+                "pnl_krw": -699658
+              }
+            ]
+          },
+          "CONL": {
+            "n": 3,
+            "pnl": 8927106,
+            "wr": 100.0,
+            "avg": 60.42,
+            "trades": [
+              {
+                "date": "2024-11-06",
+                "entry": 25.76,
+                "exit": 43.1,
+                "pnl_pct": 67.3,
+                "held": 26,
+                "layers": 2,
+                "pnl_krw": 3314698
+              },
+              {
+                "date": "2025-05-13",
+                "entry": 17.38,
+                "exit": 27.4,
+                "pnl_pct": 57.66,
+                "held": 20,
+                "layers": 2,
+                "pnl_krw": 2840013
+              },
+              {
+                "date": "2025-06-25",
+                "entry": 30.52,
+                "exit": 47.7,
+                "pnl_pct": 56.29,
+                "held": 42,
+                "layers": 2,
+                "pnl_krw": 2772395
+              }
+            ]
+          },
+          "PTIR": {
+            "n": 5,
+            "pnl": 8136802,
+            "wr": 80.0,
+            "avg": 38.61,
+            "trades": [
+              {
+                "date": "2024-11-05",
+                "entry": 2.44,
+                "exit": 4.07,
+                "pnl_pct": 66.86,
+                "held": 34,
+                "layers": 2,
+                "pnl_krw": 3292955
+              },
+              {
+                "date": "2025-01-08",
+                "entry": 8.64,
+                "exit": 6.66,
+                "pnl_pct": -22.89,
+                "held": 20,
+                "layers": 2,
+                "pnl_krw": -1127197
+              },
+              {
+                "date": "2025-02-06",
+                "entry": 9.85,
+                "exit": 16.5,
+                "pnl_pct": 67.59,
+                "held": 3,
+                "layers": 1,
+                "pnl_krw": 1958105
+              },
+              {
+                "date": "2025-05-02",
+                "entry": 10.05,
+                "exit": 16.74,
+                "pnl_pct": 66.52,
+                "held": 18,
+                "layers": 2,
+                "pnl_krw": 3276040
+              },
+              {
+                "date": "2025-06-25",
+                "entry": 17.93,
+                "exit": 20.62,
+                "pnl_pct": 14.96,
+                "held": 43,
+                "layers": 2,
+                "pnl_krw": 736899
+              }
+            ]
+          }
+        }
+      },
+      "oos": {
+        "total_pnl": 0,
+        "total_n": 0,
+        "total_wr": 0,
+        "tickers": {
+          "IREN": {
+            "n": 0,
+            "pnl": 0,
+            "wr": 0,
+            "avg": 0,
+            "trades": []
+          },
+          "CONL": {
+            "n": 0,
+            "pnl": 0,
+            "wr": 0,
+            "avg": 0,
+            "trades": []
+          },
+          "PTIR": {
+            "n": 0,
+            "pnl": 0,
+            "wr": 0,
+            "avg": 0,
+            "trades": []
+          }
+        }
+      }
+    }
+  },
+  "vix_di_surge": {
+    "original": {
+      "train": {
+        "total_pnl": 41135205,
+        "total_n": 15,
+        "total_wr": 66.7,
+        "tickers": {
+          "IREN": {
+            "n": 6,
+            "pnl": 9952330,
+            "wr": 66.7,
+            "avg": 40.66,
+            "trades": [
+              {
+                "date": "2023-12-21",
+                "entry": 3.5,
+                "exit": 7.68,
+                "pnl_pct": 119.43,
+                "held": 58,
+                "layers": 1,
+                "pnl_krw": 3579274
+              },
+              {
+                "date": "2024-06-04",
+                "entry": 4.68,
+                "exit": 8.89,
+                "pnl_pct": 89.96,
+                "held": 47,
+                "layers": 1,
+                "pnl_krw": 2696020
+              },
+              {
+                "date": "2025-01-02",
+                "entry": 9.44,
+                "exit": 10.46,
+                "pnl_pct": 10.83,
+                "held": 90,
+                "layers": 3,
+                "pnl_krw": 778962
+              },
+              {
+                "date": "2025-02-27",
+                "entry": 10.97,
+                "exit": 7.86,
+                "pnl_pct": -28.35,
+                "held": 44,
+                "layers": 1,
+                "pnl_krw": -849651
+              },
+              {
+                "date": "2025-06-26",
+                "entry": 7.22,
+                "exit": 13.11,
+                "pnl_pct": 81.53,
+                "held": 62,
+                "layers": 3,
+                "pnl_krw": 5864320
+              },
+              {
+                "date": "2025-11-13",
+                "entry": 68.94,
+                "exit": 48.65,
+                "pnl_pct": -29.43,
+                "held": 31,
+                "layers": 3,
+                "pnl_krw": -2116595
+              }
+            ]
+          },
+          "CONL": {
+            "n": 3,
+            "pnl": 21399857,
+            "wr": 100.0,
+            "avg": 107.72,
+            "trades": [
+              {
+                "date": "2023-11-27",
+                "entry": 10.57,
+                "exit": 19.87,
+                "pnl_pct": 87.9,
+                "held": 38,
+                "layers": 2,
+                "pnl_krw": 4478600
+              },
+              {
+                "date": "2024-11-11",
+                "entry": 27.59,
+                "exit": 67.81,
+                "pnl_pct": 145.79,
+                "held": 31,
+                "layers": 3,
+                "pnl_krw": 10486185
+              },
+              {
+                "date": "2025-06-24",
+                "entry": 23.78,
+                "exit": 45.06,
+                "pnl_pct": 89.47,
+                "held": 60,
+                "layers": 3,
+                "pnl_krw": 6435072
+              }
+            ]
+          },
+          "PTIR": {
+            "n": 6,
+            "pnl": 9783018,
+            "wr": 50.0,
+            "avg": 23.16,
+            "trades": [
+              {
+                "date": "2024-11-06",
+                "entry": 2.51,
+                "exit": 4.78,
+                "pnl_pct": 90.42,
+                "held": 35,
+                "layers": 3,
+                "pnl_krw": 6503441
+              },
+              {
+                "date": "2025-01-10",
+                "entry": 8.64,
+                "exit": 6.46,
+                "pnl_pct": -25.23,
+                "held": 22,
+                "layers": 2,
+                "pnl_krw": -1285382
+              },
+              {
+                "date": "2025-02-10",
+                "entry": 9.85,
+                "exit": 18.08,
+                "pnl_pct": 83.54,
+                "held": 7,
+                "layers": 1,
+                "pnl_krw": 2503594
+              },
+              {
+                "date": "2025-04-04",
+                "entry": 9.92,
+                "exit": 6.33,
+                "pnl_pct": -36.12,
+                "held": 14,
+                "layers": 1,
+                "pnl_krw": -1082623
+              },
+              {
+                "date": "2025-07-24",
+                "entry": 15.04,
+                "exit": 23.48,
+                "pnl_pct": 56.09,
+                "held": 90,
+                "layers": 3,
+                "pnl_krw": 4034731
+              },
+              {
+                "date": "2025-11-20",
+                "entry": 30.02,
+                "exit": 21.1,
+                "pnl_pct": -29.72,
+                "held": 31,
+                "layers": 1,
+                "pnl_krw": -890743
+              }
+            ]
+          }
+        }
+      },
+      "oos": {
+        "total_pnl": 0,
+        "total_n": 0,
+        "total_wr": 0,
+        "tickers": {
+          "IREN": {
+            "n": 0,
+            "pnl": 0,
+            "wr": 0,
+            "avg": 0,
+            "trades": []
+          },
+          "CONL": {
+            "n": 0,
+            "pnl": 0,
+            "wr": 0,
+            "avg": 0,
+            "trades": []
+          },
+          "PTIR": {
+            "n": 0,
+            "pnl": 0,
+            "wr": 0,
+            "avg": 0,
+            "trades": []
+          }
+        }
+      }
+    },
+    "conservative": {
+      "train": {
+        "total_pnl": 16531191,
+        "total_n": 8,
+        "total_wr": 100.0,
+        "tickers": {
+          "IREN": {
+            "n": 3,
+            "pnl": 7686317,
+            "wr": 100.0,
+            "avg": 55.44,
+            "trades": [
+              {
+                "date": "2023-12-21",
+                "entry": 4.5,
+                "exit": 7.68,
+                "pnl_pct": 70.71,
+                "held": 24,
+                "layers": 3,
+                "pnl_krw": 4916283
+              },
+              {
+                "date": "2024-06-04",
+                "entry": 5.83,
+                "exit": 8.89,
+                "pnl_pct": 52.49,
+                "held": 19,
+                "layers": 1,
+                "pnl_krw": 1520605
+              },
+              {
+                "date": "2025-09-17",
+                "entry": 26.48,
+                "exit": 37.9,
+                "pnl_pct": 43.13,
+                "held": 19,
+                "layers": 1,
+                "pnl_krw": 1249429
+              }
+            ]
+          },
+          "CONL": {
+            "n": 3,
+            "pnl": 5085589,
+            "wr": 100.0,
+            "avg": 48.87,
+            "trades": [
+              {
+                "date": "2024-11-11",
+                "entry": 43.1,
+                "exit": 67.81,
+                "pnl_pct": 57.33,
+                "held": 5,
+                "layers": 1,
+                "pnl_krw": 1660959
+              },
+              {
+                "date": "2025-05-13",
+                "entry": 18.52,
+                "exit": 27.4,
+                "pnl_pct": 47.95,
+                "held": 5,
+                "layers": 1,
+                "pnl_krw": 1389106
+              },
+              {
+                "date": "2025-06-26",
+                "entry": 37.5,
+                "exit": 53.0,
+                "pnl_pct": 41.33,
+                "held": 8,
+                "layers": 2,
+                "pnl_krw": 2035524
+              }
+            ]
+          },
+          "PTIR": {
+            "n": 2,
+            "pnl": 3759285,
+            "wr": 100.0,
+            "avg": 46.68,
+            "trades": [
+              {
+                "date": "2024-11-15",
+                "entry": 4.34,
+                "exit": 6.59,
+                "pnl_pct": 52.0,
+                "held": 10,
+                "layers": 2,
+                "pnl_krw": 2560869
+              },
+              {
+                "date": "2025-02-18",
+                "entry": 14.5,
+                "exit": 20.5,
+                "pnl_pct": 41.37,
+                "held": 14,
+                "layers": 1,
+                "pnl_krw": 1198416
+              }
+            ]
+          }
+        }
+      },
+      "oos": {
+        "total_pnl": 0,
+        "total_n": 0,
+        "total_wr": 0,
+        "tickers": {
+          "IREN": {
+            "n": 0,
+            "pnl": 0,
+            "wr": 0,
+            "avg": 0,
+            "trades": []
+          },
+          "CONL": {
+            "n": 0,
+            "pnl": 0,
+            "wr": 0,
+            "avg": 0,
+            "trades": []
+          },
+          "PTIR": {
+            "n": 0,
+            "pnl": 0,
+            "wr": 0,
+            "avg": 0,
+            "trades": []
+          }
+        }
+      }
+    }
+  },
+  "macd_vol": {
+    "original": {
+      "train": {
+        "total_pnl": 53779104,
+        "total_n": 18,
+        "total_wr": 66.7,
+        "tickers": {
+          "IREN": {
+            "n": 7,
+            "pnl": 16462392,
+            "wr": 71.4,
+            "avg": 49.54,
+            "trades": [
+              {
+                "date": "2023-12-07",
+                "entry": 3.14,
+                "exit": 5.81,
+                "pnl_pct": 85.03,
+                "held": 48,
+                "layers": 1,
+                "pnl_krw": 2548404
+              },
+              {
+                "date": "2024-06-06",
+                "entry": 5.51,
+                "exit": 10.27,
+                "pnl_pct": 86.39,
+                "held": 45,
+                "layers": 1,
+                "pnl_krw": 2589060
+              },
+              {
+                "date": "2024-12-02",
+                "entry": 8.13,
+                "exit": 12.62,
+                "pnl_pct": 55.26,
+                "held": 90,
+                "layers": 2,
+                "pnl_krw": 2815514
+              },
+              {
+                "date": "2025-03-04",
+                "entry": 10.09,
+                "exit": 7.54,
+                "pnl_pct": -25.27,
+                "held": 36,
+                "layers": 1,
+                "pnl_krw": -757418
+              },
+              {
+                "date": "2025-06-27",
+                "entry": 7.42,
+                "exit": 14.0,
+                "pnl_pct": 88.64,
+                "held": 84,
+                "layers": 3,
+                "pnl_krw": 6375548
+              },
+              {
+                "date": "2025-09-02",
+                "entry": 15.42,
+                "exit": 29.11,
+                "pnl_pct": 88.79,
+                "held": 64,
+                "layers": 2,
+                "pnl_krw": 4523718
+              },
+              {
+                "date": "2025-12-15",
+                "entry": 52.21,
+                "exit": 35.48,
+                "pnl_pct": -32.04,
+                "held": 82,
+                "layers": 2,
+                "pnl_krw": -1632434
+              }
+            ]
+          },
+          "CONL": {
+            "n": 6,
+            "pnl": 20603878,
+            "wr": 66.7,
+            "avg": 62.98,
+            "trades": [
+              {
+                "date": "2023-11-24",
+                "entry": 10.15,
+                "exit": 18.8,
+                "pnl_pct": 85.17,
+                "held": 39,
+                "layers": 1,
+                "pnl_krw": 2552454
+              },
+              {
+                "date": "2024-11-11",
+                "entry": 28.32,
+                "exit": 67.81,
+                "pnl_pct": 139.44,
+                "held": 42,
+                "layers": 3,
+                "pnl_krw": 10029854
+              },
+              {
+                "date": "2025-02-21",
+                "entry": 42.38,
+                "exit": 28.96,
+                "pnl_pct": -31.67,
+                "held": 25,
+                "layers": 1,
+                "pnl_krw": -949027
+              },
+              {
+                "date": "2025-05-13",
+                "entry": 11.88,
+                "exit": 27.4,
+                "pnl_pct": 130.64,
+                "held": 39,
+                "layers": 1,
+                "pnl_krw": 3915273
+              },
+              {
+                "date": "2025-07-16",
+                "entry": 32.17,
+                "exit": 58.45,
+                "pnl_pct": 81.7,
+                "held": 61,
+                "layers": 3,
+                "pnl_krw": 5876429
+              },
+              {
+                "date": "2025-10-22",
+                "entry": 45.15,
+                "exit": 32.78,
+                "pnl_pct": -27.4,
+                "held": 20,
+                "layers": 1,
+                "pnl_krw": -821105
+              }
+            ]
+          },
+          "PTIR": {
+            "n": 5,
+            "pnl": 16712834,
+            "wr": 80.0,
+            "avg": 56.03,
+            "trades": [
+              {
+                "date": "2024-11-08",
+                "entry": 2.75,
+                "exit": 5.26,
+                "pnl_pct": 91.52,
+                "held": 36,
+                "layers": 3,
+                "pnl_krw": 6583072
+              },
+              {
+                "date": "2025-02-10",
+                "entry": 9.83,
+                "exit": 18.08,
+                "pnl_pct": 83.8,
+                "held": 14,
+                "layers": 3,
+                "pnl_krw": 6027253
+              },
+              {
+                "date": "2025-07-17",
+                "entry": 12.57,
+                "exit": 23.31,
+                "pnl_pct": 85.51,
+                "held": 72,
+                "layers": 1,
+                "pnl_krw": 2562830
+              },
+              {
+                "date": "2025-11-03",
+                "entry": 26.6,
+                "exit": 38.79,
+                "pnl_pct": 45.79,
+                "held": 91,
+                "layers": 2,
+                "pnl_krw": 2333209
+              },
+              {
+                "date": "2025-11-19",
+                "entry": 32.51,
+                "exit": 23.9,
+                "pnl_pct": -26.48,
+                "held": 15,
+                "layers": 1,
+                "pnl_krw": -793530
+              }
+            ]
+          }
+        }
+      },
+      "oos": {
+        "total_pnl": -1593942,
+        "total_n": 2,
+        "total_wr": 0.0,
+        "tickers": {
+          "IREN": {
+            "n": 1,
+            "pnl": -767183,
+            "wr": 0.0,
+            "avg": -25.6,
+            "trades": [
+              {
+                "date": "2026-02-05",
+                "entry": 53.48,
+                "exit": 39.79,
+                "pnl_pct": -25.6,
+                "held": 15,
+                "layers": 1,
+                "pnl_krw": -767183
+              }
+            ]
+          },
+          "CONL": {
+            "n": 1,
+            "pnl": -826759,
+            "wr": 0.0,
+            "avg": -27.59,
+            "trades": [
+              {
+                "date": "2026-01-30",
+                "entry": 14.5,
+                "exit": 10.5,
+                "pnl_pct": -27.59,
+                "held": 10,
+                "layers": 1,
+                "pnl_krw": -826759
+              }
+            ]
+          },
+          "PTIR": {
+            "n": 0,
+            "pnl": 0,
+            "wr": 0,
+            "avg": 0,
+            "trades": []
+          }
+        }
+      }
+    },
+    "conservative": {
+      "train": {
+        "total_pnl": 22310678,
+        "total_n": 19,
+        "total_wr": 78.9,
+        "tickers": {
+          "IREN": {
+            "n": 9,
+            "pnl": 13652153,
+            "wr": 88.9,
+            "avg": 24.11,
+            "trades": [
+              {
+                "date": "2023-12-11",
+                "entry": 4.81,
+                "exit": 5.01,
+                "pnl_pct": 4.19,
+                "held": 13,
+                "layers": 3,
+                "pnl_krw": 291631
+              },
+              {
+                "date": "2023-12-27",
+                "entry": 6.91,
+                "exit": 9.56,
+                "pnl_pct": 38.42,
+                "held": 14,
+                "layers": 3,
+                "pnl_krw": 2671124
+              },
+              {
+                "date": "2024-06-06",
+                "entry": 7.36,
+                "exit": 10.27,
+                "pnl_pct": 39.58,
+                "held": 17,
+                "layers": 3,
+                "pnl_krw": 2751836
+              },
+              {
+                "date": "2024-06-24",
+                "entry": 11.21,
+                "exit": 12.63,
+                "pnl_pct": 12.66,
+                "held": 17,
+                "layers": 2,
+                "pnl_krw": 623748
+              },
+              {
+                "date": "2024-10-31",
+                "entry": 10.9,
+                "exit": 9.12,
+                "pnl_pct": -16.33,
+                "held": 3,
+                "layers": 1,
+                "pnl_krw": -473104
+              },
+              {
+                "date": "2025-06-24",
+                "entry": 8.41,
+                "exit": 11.54,
+                "pnl_pct": 37.22,
+                "held": 39,
+                "layers": 1,
+                "pnl_krw": 1078231
+              },
+              {
+                "date": "2025-07-17",
+                "entry": 12.93,
+                "exit": 18.05,
+                "pnl_pct": 39.65,
+                "held": 22,
+                "layers": 3,
+                "pnl_krw": 2756884
+              },
+              {
+                "date": "2025-09-15",
+                "entry": 25.56,
+                "exit": 37.14,
+                "pnl_pct": 45.29,
+                "held": 18,
+                "layers": 3,
+                "pnl_krw": 3148776
+              },
+              {
+                "date": "2025-10-17",
+                "entry": 52.21,
+                "exit": 60.72,
+                "pnl_pct": 16.3,
+                "held": 23,
+                "layers": 2,
+                "pnl_krw": 803027
+              }
+            ]
+          },
+          "CONL": {
+            "n": 4,
+            "pnl": 4026165,
+            "wr": 75.0,
+            "avg": 18.39,
+            "trades": [
+              {
+                "date": "2023-12-01",
+                "entry": 16.77,
+                "exit": 23.29,
+                "pnl_pct": 38.89,
+                "held": 16,
+                "layers": 3,
+                "pnl_krw": 2704144
+              },
+              {
+                "date": "2023-12-28",
+                "entry": 27.53,
+                "exit": 37.59,
+                "pnl_pct": 36.52,
+                "held": 15,
+                "layers": 1,
+                "pnl_krw": 1058071
+              },
+              {
+                "date": "2025-05-28",
+                "entry": 28.9,
+                "exit": 26.11,
+                "pnl_pct": -9.65,
+                "held": 12,
+                "layers": 1,
+                "pnl_krw": -279685
+              },
+              {
+                "date": "2025-06-30",
+                "entry": 42.78,
+                "exit": 46.13,
+                "pnl_pct": 7.82,
+                "held": 10,
+                "layers": 3,
+                "pnl_krw": 543635
+              }
+            ]
+          },
+          "PTIR": {
+            "n": 6,
+            "pnl": 4632360,
+            "wr": 83.3,
+            "avg": 20.3,
+            "trades": [
+              {
+                "date": "2024-10-31",
+                "entry": 2.75,
+                "exit": 2.79,
+                "pnl_pct": 1.43,
+                "held": 28,
+                "layers": 3,
+                "pnl_krw": 99421
+              },
+              {
+                "date": "2024-11-15",
+                "entry": 4.35,
+                "exit": 6.59,
+                "pnl_pct": 51.56,
+                "held": 10,
+                "layers": 2,
+                "pnl_krw": 2539151
+              },
+              {
+                "date": "2024-12-06",
+                "entry": 6.3,
+                "exit": 8.67,
+                "pnl_pct": 37.6,
+                "held": 11,
+                "layers": 1,
+                "pnl_krw": 1089256
+              },
+              {
+                "date": "2025-02-04",
+                "entry": 9.85,
+                "exit": 14.5,
+                "pnl_pct": 47.24,
+                "held": 1,
+                "layers": 1,
+                "pnl_krw": 1368668
+              },
+              {
+                "date": "2025-08-18",
+                "entry": 29.06,
+                "exit": 29.1,
+                "pnl_pct": 0.16,
+                "held": 13,
+                "layers": 1,
+                "pnl_krw": 4742
+              },
+              {
+                "date": "2025-11-04",
+                "entry": 38.79,
+                "exit": 32.51,
+                "pnl_pct": -16.18,
+                "held": 1,
+                "layers": 1,
+                "pnl_krw": -468878
+              }
+            ]
+          }
+        }
+      },
+      "oos": {
+        "total_pnl": -204430,
+        "total_n": 1,
+        "total_wr": 0.0,
+        "tickers": {
+          "IREN": {
+            "n": 1,
+            "pnl": -204430,
+            "wr": 0.0,
+            "avg": -7.06,
+            "trades": [
+              {
+                "date": "2026-01-30",
+                "entry": 57.82,
+                "exit": 53.74,
+                "pnl_pct": -7.06,
+                "held": 14,
+                "layers": 1,
+                "pnl_krw": -204430
+              }
+            ]
+          },
+          "CONL": {
+            "n": 0,
+            "pnl": 0,
+            "wr": 0,
+            "avg": 0,
+            "trades": []
+          },
+          "PTIR": {
+            "n": 0,
+            "pnl": 0,
+            "wr": 0,
+            "avg": 0,
+            "trades": []
+          }
+        }
+      }
+    }
+  },
+  "btc_rsi_e": {
+    "original": {
+      "train": {
+        "total_pnl": 50798054,
+        "total_n": 18,
+        "total_wr": 55.6,
+        "tickers": {
+          "IREN": {
+            "n": 6,
+            "pnl": 20361481,
+            "wr": 83.3,
+            "avg": 53.69,
+            "trades": [
+              {
+                "date": "2024-06-07",
+                "entry": 5.76,
+                "exit": 10.53,
+                "pnl_pct": 82.81,
+                "held": 64,
+                "layers": 1,
+                "pnl_krw": 2481890
+              },
+              {
+                "date": "2024-12-30",
+                "entry": 9.39,
+                "exit": 9.94,
+                "pnl_pct": 5.81,
+                "held": 91,
+                "layers": 3,
+                "pnl_krw": 417658
+              },
+              {
+                "date": "2025-06-27",
+                "entry": 7.65,
+                "exit": 14.0,
+                "pnl_pct": 83.07,
+                "held": 52,
+                "layers": 3,
+                "pnl_krw": 5975080
+              },
+              {
+                "date": "2025-09-02",
+                "entry": 15.49,
+                "exit": 29.11,
+                "pnl_pct": 87.94,
+                "held": 64,
+                "layers": 3,
+                "pnl_krw": 6325555
+              },
+              {
+                "date": "2025-10-14",
+                "entry": 35.82,
+                "exit": 69.56,
+                "pnl_pct": 94.2,
+                "held": 41,
+                "layers": 3,
+                "pnl_krw": 6775664
+              },
+              {
+                "date": "2025-11-13",
+                "entry": 71.22,
+                "exit": 48.65,
+                "pnl_pct": -31.69,
+                "held": 29,
+                "layers": 2,
+                "pnl_krw": -1614366
+              }
+            ]
+          },
+          "CONL": {
+            "n": 5,
+            "pnl": 16184860,
+            "wr": 60.0,
+            "avg": 53.36,
+            "trades": [
+              {
+                "date": "2023-11-28",
+                "entry": 11.09,
+                "exit": 21.97,
+                "pnl_pct": 98.02,
+                "held": 49,
+                "layers": 1,
+                "pnl_krw": 2937707
+              },
+              {
+                "date": "2024-11-11",
+                "entry": 28.32,
+                "exit": 67.81,
+                "pnl_pct": 139.44,
+                "held": 42,
+                "layers": 3,
+                "pnl_krw": 10029854
+              },
+              {
+                "date": "2025-07-16",
+                "entry": 32.17,
+                "exit": 58.45,
+                "pnl_pct": 81.7,
+                "held": 61,
+                "layers": 3,
+                "pnl_krw": 5876429
+              },
+              {
+                "date": "2025-11-04",
+                "entry": 39.59,
+                "exit": 29.31,
+                "pnl_pct": -25.97,
+                "held": 43,
+                "layers": 3,
+                "pnl_krw": -1868200
+              },
+              {
+                "date": "2025-12-18",
+                "entry": 22.47,
+                "exit": 16.54,
+                "pnl_pct": -26.39,
+                "held": 9,
+                "layers": 1,
+                "pnl_krw": -790930
+              }
+            ]
+          },
+          "PTIR": {
+            "n": 7,
+            "pnl": 14251713,
+            "wr": 42.9,
+            "avg": 23.92,
+            "trades": [
+              {
+                "date": "2024-11-06",
+                "entry": 2.45,
+                "exit": 4.78,
+                "pnl_pct": 95.19,
+                "held": 36,
+                "layers": 3,
+                "pnl_krw": 6846563
+              },
+              {
+                "date": "2025-01-13",
+                "entry": 8.2,
+                "exit": 6.01,
+                "pnl_pct": -26.67,
+                "held": 26,
+                "layers": 3,
+                "pnl_krw": -1918189
+              },
+              {
+                "date": "2025-02-18",
+                "entry": 10.43,
+                "exit": 20.5,
+                "pnl_pct": 96.49,
+                "held": 21,
+                "layers": 3,
+                "pnl_krw": 6939975
+              },
+              {
+                "date": "2025-04-03",
+                "entry": 11.16,
+                "exit": 8.24,
+                "pnl_pct": -26.18,
+                "held": 10,
+                "layers": 1,
+                "pnl_krw": -784742
+              },
+              {
+                "date": "2025-08-08",
+                "entry": 18.68,
+                "exit": 33.76,
+                "pnl_pct": 80.74,
+                "held": 84,
+                "layers": 3,
+                "pnl_krw": 5807452
+              },
+              {
+                "date": "2025-08-19",
+                "entry": 32.15,
+                "exit": 23.64,
+                "pnl_pct": -26.45,
+                "held": 8,
+                "layers": 1,
+                "pnl_krw": -792697
+              },
+              {
+                "date": "2025-11-19",
+                "entry": 32.16,
+                "exit": 23.9,
+                "pnl_pct": -25.67,
+                "held": 58,
+                "layers": 3,
+                "pnl_krw": -1846649
+              }
+            ]
+          }
+        }
+      },
+      "oos": {
+        "total_pnl": -1505647,
+        "total_n": 1,
+        "total_wr": 0.0,
+        "tickers": {
+          "IREN": {
+            "n": 1,
+            "pnl": -1505647,
+            "wr": 0.0,
+            "avg": -29.55,
+            "trades": [
+              {
+                "date": "2026-02-05",
+                "entry": 56.48,
+                "exit": 39.79,
+                "pnl_pct": -29.55,
+                "held": 16,
+                "layers": 2,
+                "pnl_krw": -1505647
+              }
+            ]
+          },
+          "CONL": {
+            "n": 0,
+            "pnl": 0,
+            "wr": 0,
+            "avg": 0,
+            "trades": []
+          },
+          "PTIR": {
+            "n": 0,
+            "pnl": 0,
+            "wr": 0,
+            "avg": 0,
+            "trades": []
+          }
+        }
+      }
+    },
+    "conservative": {
+      "train": {
+        "total_pnl": 23685631,
+        "total_n": 24,
+        "total_wr": 75.0,
+        "tickers": {
+          "IREN": {
+            "n": 12,
+            "pnl": 13319055,
+            "wr": 75.0,
+            "avg": 23.85,
+            "trades": [
+              {
+                "date": "2023-12-07",
+                "entry": 3.64,
+                "exit": 5.81,
+                "pnl_pct": 59.5,
+                "held": 13,
+                "layers": 2,
+                "pnl_krw": 3031484
+              },
+              {
+                "date": "2023-12-28",
+                "entry": 6.39,
+                "exit": 8.54,
+                "pnl_pct": 33.61,
+                "held": 9,
+                "layers": 2,
+                "pnl_krw": 1712463
+              },
+              {
+                "date": "2024-04-02",
+                "entry": 6.47,
+                "exit": 5.89,
+                "pnl_pct": -8.96,
+                "held": 1,
+                "layers": 1,
+                "pnl_krw": -268665
+              },
+              {
+                "date": "2024-05-23",
+                "entry": 5.83,
+                "exit": 7.07,
+                "pnl_pct": 21.27,
+                "held": 7,
+                "layers": 1,
+                "pnl_krw": 637441
+              },
+              {
+                "date": "2024-06-12",
+                "entry": 8.34,
+                "exit": 13.55,
+                "pnl_pct": 62.39,
+                "held": 9,
+                "layers": 2,
+                "pnl_krw": 3178855
+              },
+              {
+                "date": "2024-12-10",
+                "entry": 13.11,
+                "exit": 13.36,
+                "pnl_pct": 1.93,
+                "held": 13,
+                "layers": 2,
+                "pnl_krw": 98242
+              },
+              {
+                "date": "2025-07-03",
+                "entry": 10.42,
+                "exit": 16.82,
+                "pnl_pct": 61.49,
+                "held": 27,
+                "layers": 2,
+                "pnl_krw": 3133080
+              },
+              {
+                "date": "2025-07-28",
+                "entry": 16.95,
+                "exit": 16.58,
+                "pnl_pct": -2.18,
+                "held": 21,
+                "layers": 1,
+                "pnl_krw": -65421
+              },
+              {
+                "date": "2025-09-04",
+                "entry": 24.39,
+                "exit": 26.13,
+                "pnl_pct": 7.11,
+                "held": 10,
+                "layers": 2,
+                "pnl_krw": 362451
+              },
+              {
+                "date": "2025-09-24",
+                "entry": 30.19,
+                "exit": 47.14,
+                "pnl_pct": 56.14,
+                "held": 15,
+                "layers": 1,
+                "pnl_krw": 1682648
+              },
+              {
+                "date": "2025-09-26",
+                "entry": 46.29,
+                "exit": 41.86,
+                "pnl_pct": -9.57,
+                "held": 1,
+                "layers": 1,
+                "pnl_krw": -286816
+              },
+              {
+                "date": "2025-10-16",
+                "entry": 59.77,
+                "exit": 61.83,
+                "pnl_pct": 3.45,
+                "held": 6,
+                "layers": 1,
+                "pnl_krw": 103293
+              }
+            ]
+          },
+          "CONL": {
+            "n": 4,
+            "pnl": 4969100,
+            "wr": 75.0,
+            "avg": 24.84,
+            "trades": [
+              {
+                "date": "2023-12-01",
+                "entry": 14.58,
+                "exit": 23.29,
+                "pnl_pct": 59.75,
+                "held": 17,
+                "layers": 2,
+                "pnl_krw": 3044355
+              },
+              {
+                "date": "2024-10-22",
+                "entry": 29.2,
+                "exit": 33.1,
+                "pnl_pct": 13.36,
+                "held": 8,
+                "layers": 1,
+                "pnl_krw": 400284
+              },
+              {
+                "date": "2025-06-27",
+                "entry": 34.73,
+                "exit": 46.95,
+                "pnl_pct": 35.17,
+                "held": 9,
+                "layers": 2,
+                "pnl_krw": 1791967
+              },
+              {
+                "date": "2025-10-10",
+                "entry": 45.15,
+                "exit": 41.12,
+                "pnl_pct": -8.93,
+                "held": 8,
+                "layers": 1,
+                "pnl_krw": -267506
+              }
+            ]
+          },
+          "PTIR": {
+            "n": 8,
+            "pnl": 5397476,
+            "wr": 75.0,
+            "avg": 16.84,
+            "trades": [
+              {
+                "date": "2024-10-31",
+                "entry": 2.64,
+                "exit": 2.79,
+                "pnl_pct": 5.49,
+                "held": 28,
+                "layers": 2,
+                "pnl_krw": 279533
+              },
+              {
+                "date": "2024-11-15",
+                "entry": 4.07,
+                "exit": 6.59,
+                "pnl_pct": 61.84,
+                "held": 10,
+                "layers": 1,
+                "pnl_krw": 1853420
+              },
+              {
+                "date": "2024-12-09",
+                "entry": 6.3,
+                "exit": 7.8,
+                "pnl_pct": 23.79,
+                "held": 14,
+                "layers": 1,
+                "pnl_krw": 712896
+              },
+              {
+                "date": "2024-12-18",
+                "entry": 7.46,
+                "exit": 7.52,
+                "pnl_pct": 0.9,
+                "held": 8,
+                "layers": 1,
+                "pnl_krw": 27018
+              },
+              {
+                "date": "2024-12-27",
+                "entry": 9.5,
+                "exit": 9.1,
+                "pnl_pct": -4.17,
+                "held": 7,
+                "layers": 1,
+                "pnl_krw": -124850
+              },
+              {
+                "date": "2025-02-10",
+                "entry": 11.35,
+                "exit": 18.08,
+                "pnl_pct": 59.29,
+                "held": 7,
+                "layers": 2,
+                "pnl_krw": 3020708
+              },
+              {
+                "date": "2025-08-15",
+                "entry": 29.06,
+                "exit": 30.16,
+                "pnl_pct": 3.8,
+                "held": 10,
+                "layers": 1,
+                "pnl_krw": 113798
+              },
+              {
+                "date": "2025-11-04",
+                "entry": 38.79,
+                "exit": 32.51,
+                "pnl_pct": -16.18,
+                "held": 1,
+                "layers": 1,
+                "pnl_krw": -485047
+              }
+            ]
+          }
+        }
+      },
+      "oos": {
+        "total_pnl": -155455,
+        "total_n": 1,
+        "total_wr": 0.0,
+        "tickers": {
+          "IREN": {
+            "n": 1,
+            "pnl": -155455,
+            "wr": 0.0,
+            "avg": -5.19,
+            "trades": [
+              {
+                "date": "2026-01-30",
+                "entry": 56.68,
+                "exit": 53.74,
+                "pnl_pct": -5.19,
+                "held": 7,
+                "layers": 1,
+                "pnl_krw": -155455
+              }
+            ]
+          },
+          "CONL": {
+            "n": 0,
+            "pnl": 0,
+            "wr": 0,
+            "avg": 0,
+            "trades": []
+          },
+          "PTIR": {
+            "n": 0,
+            "pnl": 0,
+            "wr": 0,
+            "avg": 0,
+            "trades": []
+          }
+        }
+      }
+    }
+  },
+  "strong25_macd": {
+    "original": {
+      "train": {
+        "total_pnl": 24572000,
+        "total_n": 20,
+        "total_wr": 35.0,
+        "tickers": {
+          "IREN": {
+            "n": 8,
+            "pnl": 19714531,
+            "wr": 50.0,
+            "avg": 29.49,
+            "trades": [
+              {
+                "date": "2023-12-26",
+                "entry": 4.81,
+                "exit": 8.79,
+                "pnl_pct": 82.81,
+                "held": 28,
+                "layers": 3,
+                "pnl_krw": 5956209
+              },
+              {
+                "date": "2023-12-29",
+                "entry": 9.56,
+                "exit": 7.15,
+                "pnl_pct": -25.21,
+                "held": 2,
+                "layers": 1,
+                "pnl_krw": -755520
+              },
+              {
+                "date": "2024-06-17",
+                "entry": 7.96,
+                "exit": 14.45,
+                "pnl_pct": 81.45,
+                "held": 27,
+                "layers": 3,
+                "pnl_krw": 5858754
+              },
+              {
+                "date": "2024-07-18",
+                "entry": 13.95,
+                "exit": 10.23,
+                "pnl_pct": -26.67,
+                "held": 30,
+                "layers": 1,
+                "pnl_krw": -799200
+              },
+              {
+                "date": "2025-01-27",
+                "entry": 12.7,
+                "exit": 10.09,
+                "pnl_pct": -20.52,
+                "held": 91,
+                "layers": 3,
+                "pnl_krw": -1476261
+              },
+              {
+                "date": "2025-08-29",
+                "entry": 14.2,
+                "exit": 26.48,
+                "pnl_pct": 86.49,
+                "held": 64,
+                "layers": 3,
+                "pnl_krw": 6220837
+              },
+              {
+                "date": "2025-10-07",
+                "entry": 33.39,
+                "exit": 61.68,
+                "pnl_pct": 84.72,
+                "held": 35,
+                "layers": 3,
+                "pnl_krw": 6093400
+              },
+              {
+                "date": "2025-11-14",
+                "entry": 63.66,
+                "exit": 46.37,
+                "pnl_pct": -27.16,
+                "held": 37,
+                "layers": 2,
+                "pnl_krw": -1383688
+              }
+            ]
+          },
+          "CONL": {
+            "n": 8,
+            "pnl": 5339699,
+            "wr": 25.0,
+            "avg": 2.49,
+            "trades": [
+              {
+                "date": "2023-12-19",
+                "entry": 16.34,
+                "exit": 30.41,
+                "pnl_pct": 86.11,
+                "held": 34,
+                "layers": 3,
+                "pnl_krw": 6193912
+              },
+              {
+                "date": "2024-01-11",
+                "entry": 33.45,
+                "exit": 24.5,
+                "pnl_pct": -26.75,
+                "held": 22,
+                "layers": 3,
+                "pnl_krw": -1924344
+              },
+              {
+                "date": "2024-04-05",
+                "entry": 85.17,
+                "exit": 62.66,
+                "pnl_pct": -26.43,
+                "held": 11,
+                "layers": 1,
+                "pnl_krw": -792092
+              },
+              {
+                "date": "2024-06-24",
+                "entry": 62.45,
+                "exit": 41.73,
+                "pnl_pct": -33.18,
+                "held": 18,
+                "layers": 1,
+                "pnl_krw": -994361
+              },
+              {
+                "date": "2024-10-31",
+                "entry": 31.04,
+                "exit": 22.82,
+                "pnl_pct": -26.49,
+                "held": 17,
+                "layers": 2,
+                "pnl_krw": -1349615
+              },
+              {
+                "date": "2025-02-05",
+                "entry": 43.49,
+                "exit": 41.12,
+                "pnl_pct": -5.45,
+                "held": 90,
+                "layers": 1,
+                "pnl_krw": -163323
+              },
+              {
+                "date": "2025-07-16",
+                "entry": 32.17,
+                "exit": 58.45,
+                "pnl_pct": 81.7,
+                "held": 61,
+                "layers": 3,
+                "pnl_krw": 5876429
+              },
+              {
+                "date": "2025-10-22",
+                "entry": 46.55,
+                "exit": 32.78,
+                "pnl_pct": -29.58,
+                "held": 20,
+                "layers": 2,
+                "pnl_krw": -1506907
+              }
+            ]
+          },
+          "PTIR": {
+            "n": 4,
+            "pnl": -482230,
+            "wr": 25.0,
+            "avg": -1.68,
+            "trades": [
+              {
+                "date": "2024-11-29",
+                "entry": 3.72,
+                "exit": 6.75,
+                "pnl_pct": 81.77,
+                "held": 51,
+                "layers": 3,
+                "pnl_krw": 5881754
+              },
+              {
+                "date": "2025-01-13",
+                "entry": 8.45,
+                "exit": 6.01,
+                "pnl_pct": -28.87,
+                "held": 41,
+                "layers": 3,
+                "pnl_krw": -2076631
+              },
+              {
+                "date": "2025-02-24",
+                "entry": 15.99,
+                "exit": 10.5,
+                "pnl_pct": -34.32,
+                "held": 20,
+                "layers": 3,
+                "pnl_krw": -2468298
+              },
+              {
+                "date": "2025-08-20",
+                "entry": 30.92,
+                "exit": 23.1,
+                "pnl_pct": -25.29,
+                "held": 15,
+                "layers": 3,
+                "pnl_krw": -1819055
+              }
+            ]
+          }
+        }
+      },
+      "oos": {
+        "total_pnl": -1706184,
+        "total_n": 1,
+        "total_wr": 0.0,
+        "tickers": {
+          "IREN": {
+            "n": 1,
+            "pnl": -1706184,
+            "wr": 0.0,
+            "avg": -33.49,
+            "trades": [
+              {
+                "date": "2026-02-05",
+                "entry": 59.82,
+                "exit": 39.79,
+                "pnl_pct": -33.49,
+                "held": 20,
+                "layers": 2,
+                "pnl_krw": -1706184
+              }
+            ]
+          },
+          "CONL": {
+            "n": 0,
+            "pnl": 0,
+            "wr": 0,
+            "avg": 0,
+            "trades": []
+          },
+          "PTIR": {
+            "n": 0,
+            "pnl": 0,
+            "wr": 0,
+            "avg": 0,
+            "trades": []
+          }
+        }
+      }
+    },
+    "conservative": {
+      "train": {
+        "total_pnl": 47258963,
+        "total_n": 37,
+        "total_wr": 59.5,
+        "tickers": {
+          "IREN": {
+            "n": 16,
+            "pnl": 23097496,
+            "wr": 68.8,
+            "avg": 18.92,
+            "trades": [
+              {
+                "date": "2023-12-01",
+                "entry": 3.44,
+                "exit": 5.57,
+                "pnl_pct": 62.09,
+                "held": 9,
+                "layers": 3,
+                "pnl_krw": 4168173
+              },
+              {
+                "date": "2023-12-27",
+                "entry": 6.03,
+                "exit": 9.56,
+                "pnl_pct": 58.5,
+                "held": 23,
+                "layers": 3,
+                "pnl_krw": 3927526
+              },
+              {
+                "date": "2024-03-05",
+                "entry": 6.91,
+                "exit": 5.09,
+                "pnl_pct": -26.34,
+                "held": 8,
+                "layers": 1,
+                "pnl_krw": -736744
+              },
+              {
+                "date": "2024-04-12",
+                "entry": 5.97,
+                "exit": 4.65,
+                "pnl_pct": -22.16,
+                "held": 23,
+                "layers": 2,
+                "pnl_krw": -1053993
+              },
+              {
+                "date": "2024-04-30",
+                "entry": 5.51,
+                "exit": 4.34,
+                "pnl_pct": -21.23,
+                "held": 8,
+                "layers": 1,
+                "pnl_krw": -593961
+              },
+              {
+                "date": "2024-06-06",
+                "entry": 6.46,
+                "exit": 10.27,
+                "pnl_pct": 59.1,
+                "held": 21,
+                "layers": 3,
+                "pnl_krw": 3967385
+              },
+              {
+                "date": "2024-07-12",
+                "entry": 11.21,
+                "exit": 12.31,
+                "pnl_pct": 9.81,
+                "held": 35,
+                "layers": 2,
+                "pnl_krw": 466499
+              },
+              {
+                "date": "2024-09-04",
+                "entry": 8.52,
+                "exit": 6.72,
+                "pnl_pct": -21.13,
+                "held": 6,
+                "layers": 1,
+                "pnl_krw": -590958
+              },
+              {
+                "date": "2024-10-29",
+                "entry": 9.68,
+                "exit": 10.55,
+                "pnl_pct": 8.96,
+                "held": 35,
+                "layers": 2,
+                "pnl_krw": 426170
+              },
+              {
+                "date": "2024-12-11",
+                "entry": 12.24,
+                "exit": 13.61,
+                "pnl_pct": 11.2,
+                "held": 35,
+                "layers": 3,
+                "pnl_krw": 751665
+              },
+              {
+                "date": "2025-02-21",
+                "entry": 12.5,
+                "exit": 10.88,
+                "pnl_pct": -12.99,
+                "held": 35,
+                "layers": 2,
+                "pnl_krw": -617637
+              },
+              {
+                "date": "2025-05-28",
+                "entry": 6.69,
+                "exit": 8.86,
+                "pnl_pct": 32.43,
+                "held": 35,
+                "layers": 3,
+                "pnl_krw": 2177442
+              },
+              {
+                "date": "2025-07-03",
+                "entry": 10.43,
+                "exit": 16.82,
+                "pnl_pct": 61.25,
+                "held": 27,
+                "layers": 3,
+                "pnl_krw": 4111749
+              },
+              {
+                "date": "2025-08-11",
+                "entry": 16.95,
+                "exit": 17.97,
+                "pnl_pct": 6.02,
+                "held": 35,
+                "layers": 1,
+                "pnl_krw": 168327
+              },
+              {
+                "date": "2025-09-10",
+                "entry": 20.81,
+                "exit": 33.63,
+                "pnl_pct": 61.64,
+                "held": 27,
+                "layers": 3,
+                "pnl_krw": 4137883
+              },
+              {
+                "date": "2025-10-27",
+                "entry": 47.94,
+                "exit": 64.99,
+                "pnl_pct": 35.57,
+                "held": 35,
+                "layers": 3,
+                "pnl_krw": 2387970
+              }
+            ]
+          },
+          "CONL": {
+            "n": 13,
+            "pnl": 13132337,
+            "wr": 46.2,
+            "avg": 12.24,
+            "trades": [
+              {
+                "date": "2023-11-28",
+                "entry": 13.3,
+                "exit": 21.97,
+                "pnl_pct": 65.16,
+                "held": 22,
+                "layers": 3,
+                "pnl_krw": 4374445
+              },
+              {
+                "date": "2023-12-27",
+                "entry": 24.27,
+                "exit": 37.32,
+                "pnl_pct": 53.76,
+                "held": 28,
+                "layers": 3,
+                "pnl_krw": 3608822
+              },
+              {
+                "date": "2024-01-11",
+                "entry": 33.86,
+                "exit": 24.5,
+                "pnl_pct": -27.64,
+                "held": 13,
+                "layers": 1,
+                "pnl_krw": -773062
+              },
+              {
+                "date": "2024-03-25",
+                "entry": 51.61,
+                "exit": 85.17,
+                "pnl_pct": 65.03,
+                "held": 28,
+                "layers": 3,
+                "pnl_krw": 4365851
+              },
+              {
+                "date": "2024-06-27",
+                "entry": 50.02,
+                "exit": 46.2,
+                "pnl_pct": -7.64,
+                "held": 35,
+                "layers": 2,
+                "pnl_krw": -363383
+              },
+              {
+                "date": "2024-08-01",
+                "entry": 53.08,
+                "exit": 39.16,
+                "pnl_pct": -26.22,
+                "held": 17,
+                "layers": 1,
+                "pnl_krw": -733554
+              },
+              {
+                "date": "2024-10-01",
+                "entry": 28.75,
+                "exit": 21.15,
+                "pnl_pct": -26.43,
+                "held": 4,
+                "layers": 1,
+                "pnl_krw": -739434
+              },
+              {
+                "date": "2024-10-31",
+                "entry": 31.04,
+                "exit": 22.82,
+                "pnl_pct": -26.49,
+                "held": 17,
+                "layers": 2,
+                "pnl_krw": -1259641
+              },
+              {
+                "date": "2024-11-11",
+                "entry": 43.1,
+                "exit": 67.81,
+                "pnl_pct": 57.33,
+                "held": 5,
+                "layers": 1,
+                "pnl_krw": 1603685
+              },
+              {
+                "date": "2025-02-18",
+                "entry": 48.22,
+                "exit": 37.02,
+                "pnl_pct": -23.23,
+                "held": 26,
+                "layers": 1,
+                "pnl_krw": -649702
+              },
+              {
+                "date": "2025-06-12",
+                "entry": 21.37,
+                "exit": 23.11,
+                "pnl_pct": 8.13,
+                "held": 35,
+                "layers": 2,
+                "pnl_krw": 386690
+              },
+              {
+                "date": "2025-07-14",
+                "entry": 37.22,
+                "exit": 57.35,
+                "pnl_pct": 54.08,
+                "held": 26,
+                "layers": 3,
+                "pnl_krw": 3630376
+              },
+              {
+                "date": "2025-10-21",
+                "entry": 39.35,
+                "exit": 36.71,
+                "pnl_pct": -6.7,
+                "held": 35,
+                "layers": 2,
+                "pnl_krw": -318756
+              }
+            ]
+          },
+          "PTIR": {
+            "n": 8,
+            "pnl": 11029130,
+            "wr": 62.5,
+            "avg": 19.08,
+            "trades": [
+              {
+                "date": "2024-11-06",
+                "entry": 2.75,
+                "exit": 4.78,
+                "pnl_pct": 74.09,
+                "held": 34,
+                "layers": 3,
+                "pnl_krw": 4973930
+              },
+              {
+                "date": "2024-12-06",
+                "entry": 5.31,
+                "exit": 8.67,
+                "pnl_pct": 63.14,
+                "held": 29,
+                "layers": 3,
+                "pnl_krw": 4239097
+              },
+              {
+                "date": "2025-01-08",
+                "entry": 8.46,
+                "exit": 6.66,
+                "pnl_pct": -21.23,
+                "held": 30,
+                "layers": 3,
+                "pnl_krw": -1425214
+              },
+              {
+                "date": "2025-02-18",
+                "entry": 12.46,
+                "exit": 20.5,
+                "pnl_pct": 64.54,
+                "held": 15,
+                "layers": 3,
+                "pnl_krw": 4332863
+              },
+              {
+                "date": "2025-06-17",
+                "entry": 17.19,
+                "exit": 19.37,
+                "pnl_pct": 12.71,
+                "held": 35,
+                "layers": 1,
+                "pnl_krw": 355416
+              },
+              {
+                "date": "2025-08-20",
+                "entry": 29.89,
+                "exit": 23.1,
+                "pnl_pct": -22.71,
+                "held": 15,
+                "layers": 2,
+                "pnl_krw": -1079862
+              },
+              {
+                "date": "2025-10-30",
+                "entry": 31.97,
+                "exit": 34.17,
+                "pnl_pct": 6.88,
+                "held": 35,
+                "layers": 2,
+                "pnl_krw": 327246
+              },
+              {
+                "date": "2025-11-06",
+                "entry": 36.25,
+                "exit": 27.25,
+                "pnl_pct": -24.82,
+                "held": 6,
+                "layers": 1,
+                "pnl_krw": -694346
+              }
+            ]
+          }
+        }
+      },
+      "oos": {
+        "total_pnl": -2187163,
+        "total_n": 2,
+        "total_wr": 0.0,
+        "tickers": {
+          "IREN": {
+            "n": 1,
+            "pnl": -1588304,
+            "wr": 0.0,
+            "avg": -23.66,
+            "trades": [
+              {
+                "date": "2026-02-05",
+                "entry": 52.12,
+                "exit": 39.79,
+                "pnl_pct": -23.66,
+                "held": 31,
+                "layers": 3,
+                "pnl_krw": -1588304
+              }
+            ]
+          },
+          "CONL": {
+            "n": 1,
+            "pnl": -598859,
+            "wr": 0.0,
+            "avg": -21.41,
+            "trades": [
+              {
+                "date": "2026-01-20",
+                "entry": 18.45,
+                "exit": 14.5,
+                "pnl_pct": -21.41,
+                "held": 15,
+                "layers": 1,
+                "pnl_krw": -598859
+              }
+            ]
+          },
+          "PTIR": {
+            "n": 0,
+            "pnl": 0,
+            "wr": 0,
+            "avg": 0,
+            "trades": []
+          }
+        }
+      }
+    }
+  }
+}

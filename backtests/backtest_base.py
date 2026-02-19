@@ -48,12 +48,14 @@ class BacktestBase(ABC):
         start_date: date = date(2025, 2, 18),
         end_date: date = date(2026, 2, 17),
         use_fees: bool = True,
+        signal_engine=None,
     ):
         self.params = params
         self.start_date = start_date
         self.end_date = end_date
         self.use_fees = use_fees
         self._verbose = False
+        self._signal_engine = signal_engine
 
         # Common state
         self.cash = params.total_capital

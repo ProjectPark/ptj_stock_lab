@@ -70,6 +70,35 @@ class MarketData:
     volumes: dict[str, float] | None = None
     crypto: dict[str, float] | None = None
 
+    @classmethod
+    def from_backtest_bar(
+        cls,
+        changes: dict[str, dict],
+        prices: dict[str, float] | None = None,
+        poly_probs: dict[str, float] | None = None,
+        ts: "datetime | None" = None,
+    ) -> "MarketData":
+        """Legacy 백테스트 데이터 → MarketData 변환.
+
+        Parameters
+        ----------
+        changes : dict[str, dict]
+            {ticker: {"change_pct": float, ...}, ...} 형식의 Legacy 변동률.
+        prices : dict[str, float] | None
+            현재가 dict.
+        poly_probs : dict[str, float] | None
+            Polymarket 확률.
+        ts : datetime | None
+            타임스탬프.
+        """
+        flat_changes = {k: v.get("change_pct", 0.0) for k, v in changes.items()}
+        return cls(
+            changes=flat_changes,
+            prices=prices or {},
+            poly=poly_probs,
+            time=ts or datetime.now(),
+        )
+
 
 @dataclass
 class Signal:

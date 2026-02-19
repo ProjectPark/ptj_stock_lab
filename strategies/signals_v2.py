@@ -1,7 +1,16 @@
 """
-PTJ 매매법 v2 - 시그널 엔진
-============================
+PTJ 매매법 v2 - 시그널 엔진 [DEPRECATED]
+=========================================
+.. deprecated::
+    이 모듈은 OOP 플러그인 패턴으로 마이그레이션되었습니다.
+    새 코드는 ``strategies.taejun_attach_pattern`` 패키지를 사용하세요:
+    - MarketModeFilter, GoldFilter, SidewaysDetector (filters.py)
+    - TwinPairStrategy, ConditionalCoinStrategy, ConditionalConlStrategy (각 모듈)
+    - BearishDefenseStrategy (bearish_defense.py)
+    - CompositeSignalEngine (composite_signal_engine.py)
+
 v2 매매 규칙을 순수 함수로 구현. config 의존 없음 — 모든 파라미터는 인자로 전달.
+이 파일은 signals_v5.py에서 아직 참조하므로 유지하되, 직접 사용은 권장하지 않음.
 
 주요 변경 (v1 대비):
 - Polymarket 기반 시황 판단 (bullish/bearish/normal)

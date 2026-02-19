@@ -104,17 +104,24 @@ class BacktestEngineV2(BacktestBase):
         end_date: date = date(2026, 2, 17),
         use_fees: bool = True,
         params=None,
+        signal_engine=None,
     ):
         # Backward compat: build params from config if not provided
         if params is None:
             from strategies.params import v2_params_from_config
             params = v2_params_from_config()
 
+        # OOP signal engine: 기본값으로 CompositeSignalEngine 사용
+        if signal_engine is None:
+            from strategies.taejun_attach_pattern.composite_signal_engine import CompositeSignalEngine
+            signal_engine = CompositeSignalEngine.from_base_params(params)
+
         super().__init__(
             params=params,
             start_date=start_date,
             end_date=end_date,
             use_fees=use_fees,
+            signal_engine=signal_engine,
         )
 
     # Backward-compat aliases (v2 uses *_usd naming)
@@ -175,7 +182,7 @@ class BacktestEngineV2(BacktestBase):
         prev_close: dict[str, float],
     ) -> dict:
         """일 시작 시 처리."""
-        market_mode = signals_v2.determine_market_mode(poly_probs)
+        market_mode = self._signal_engine.market_mode_filter.evaluate(poly_probs)
 
         if market_mode == "bullish":
             stop_loss_threshold = config.STOP_LOSS_BULLISH_PCT
@@ -221,17 +228,11 @@ class BacktestEngineV2(BacktestBase):
         poly_probs = day_ctx["poly_probs"]
         today_pairs = day_ctx["today_pairs"]
 
-        # Generate signals
-        sigs = signals_v2.generate_all_signals_v2(
+        # Generate signals (OOP CompositeSignalEngine)
+        sigs = self._signal_engine.generate_all_signals(
             changes,
             poly_probs=poly_probs,
             pairs=today_pairs,
-            coin_trigger_pct=config.COIN_TRIGGER_PCT,
-            coin_sell_profit_pct=config.COIN_SELL_PROFIT_PCT,
-            coin_sell_bearish_pct=config.COIN_SELL_BEARISH_PCT,
-            conl_trigger_pct=config.CONL_TRIGGER_PCT,
-            conl_sell_profit_pct=config.CONL_SELL_PROFIT_PCT,
-            conl_sell_avg_pct=config.CONL_SELL_AVG_PCT,
         )
 
         gold_warning = sigs["gold"]["warning"]

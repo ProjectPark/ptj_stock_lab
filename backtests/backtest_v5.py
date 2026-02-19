@@ -108,17 +108,24 @@ class BacktestEngineV5(BacktestBase):
         end_date: date = date(2026, 2, 17),
         use_fees: bool = True,
         params=None,
+        signal_engine=None,
     ):
         # Backward compat: build params from config if not provided
         if params is None:
             from strategies.params import v5_params_from_config
             params = v5_params_from_config()
 
+        # OOP signal engine: 기본값으로 CompositeSignalEngine 사용
+        if signal_engine is None:
+            from strategies.taejun_attach_pattern.composite_signal_engine import CompositeSignalEngine
+            signal_engine = CompositeSignalEngine.from_base_params(params)
+
         super().__init__(
             params=params,
             start_date=start_date,
             end_date=end_date,
             use_fees=use_fees,
+            signal_engine=signal_engine,
         )
 
         # NOTE:
@@ -238,7 +245,7 @@ class BacktestEngineV5(BacktestBase):
             self._gdxu_entry_day_idx = day_idx
 
         # (c) Handle carry positions from previous day
-        base_mode = signals_v5.determine_market_mode_v5(poly_probs, sideways_active=False)
+        base_mode = self._signal_engine.market_mode_filter.evaluate(poly_probs, sideways_active=False)
         self._handle_carry_positions(day_sym, day_ts, base_mode, prev_close)
 
         # (d) Determine stop loss threshold
@@ -299,19 +306,12 @@ class BacktestEngineV5(BacktestBase):
         if self._sideways_active:
             day_ctx["day_had_sideways"] = True
 
-        # 시그널 생성 (v5)
-        sigs = signals_v5.generate_all_signals_v5(
+        # 시그널 생성 (OOP CompositeSignalEngine)
+        sigs = self._signal_engine.generate_all_signals(
             changes,
             poly_probs=poly_probs,
             pairs=today_pairs,
             sideways_active=self._sideways_active,
-            entry_threshold=config.V5_PAIR_GAP_ENTRY_THRESHOLD,
-            coin_trigger_pct=config.V5_COIN_TRIGGER_PCT,
-            coin_sell_profit_pct=config.COIN_SELL_PROFIT_PCT,
-            coin_sell_bearish_pct=config.COIN_SELL_BEARISH_PCT,
-            conl_trigger_pct=config.V5_CONL_TRIGGER_PCT,
-            conl_sell_profit_pct=config.CONL_SELL_PROFIT_PCT,
-            conl_sell_avg_pct=config.CONL_SELL_AVG_PCT,
         )
 
         gold_warning = sigs["gold"]["warning"]
@@ -861,18 +861,11 @@ class BacktestEngineV5(BacktestBase):
             if elapsed < config.V5_SIDEWAYS_EVAL_INTERVAL_MIN:
                 return
 
-        result = signals_v5.evaluate_sideways(
+        result = self._signal_engine.sideways_detector.evaluate(
             poly_probs=poly_probs,
             changes=changes,
             gap_fail_count=self._gap_fail_count,
             trigger_fail_count=self._trigger_fail_count,
-            poly_low=config.V5_SIDEWAYS_POLY_LOW,
-            poly_high=config.V5_SIDEWAYS_POLY_HIGH,
-            gld_threshold=config.V5_SIDEWAYS_GLD_THRESHOLD,
-            gap_fail_threshold=config.V5_SIDEWAYS_GAP_FAIL_COUNT,
-            trigger_fail_threshold=config.V5_SIDEWAYS_TRIGGER_FAIL_COUNT,
-            index_threshold=config.V5_SIDEWAYS_INDEX_THRESHOLD,
-            min_signals=config.V5_SIDEWAYS_MIN_SIGNALS,
         )
 
         self._sideways_active = result["is_sideways"]

@@ -17,7 +17,7 @@ Data:
 
 Dependencies:
   - config.py          : v3 parameters
-  - signals_v3.py      : v3 signal functions
+  - CompositeSignalEngine : OOP signal engine (replaced signals_v3.py)
   - backtest_common.py : shared utilities
   - backtest_base.py   : BacktestBase ABC
 """
@@ -37,7 +37,6 @@ import numpy as np
 import pandas as pd
 
 import config
-import signals_v3
 import backtest_common
 from backtest_base import BacktestBase
 
@@ -104,17 +103,24 @@ class BacktestEngineV3(BacktestBase):
         end_date: date = date(2026, 2, 17),
         use_fees: bool = True,
         params=None,
+        signal_engine=None,
     ):
         # Backward compat: build params from config if not provided
         if params is None:
             from strategies.params import v3_params_from_config
             params = v3_params_from_config()
 
+        # OOP signal engine: 기본값으로 CompositeSignalEngine 사용
+        if signal_engine is None:
+            from strategies.taejun_attach_pattern.composite_signal_engine import CompositeSignalEngine
+            signal_engine = CompositeSignalEngine.from_base_params(params)
+
         super().__init__(
             params=params,
             start_date=start_date,
             end_date=end_date,
             use_fees=use_fees,
+            signal_engine=signal_engine,
         )
 
         # Alias for backward compatibility
@@ -206,7 +212,7 @@ class BacktestEngineV3(BacktestBase):
             self._current_fx_rate = self._get_fx_rate(first_ts_of_day)
 
         # Market mode
-        base_mode = signals_v3.determine_market_mode_v3(poly_probs, sideways_active=False)
+        base_mode = self._signal_engine.market_mode_filter.evaluate(poly_probs, sideways_active=False)
 
         # Handle carry positions
         self._handle_carry_positions(day_sym, day_ts, base_mode, prev_close)
@@ -264,19 +270,12 @@ class BacktestEngineV3(BacktestBase):
         if self._sideways_active:
             day_ctx["day_had_sideways"] = True
 
-        # 시그널 생성 (v3)
-        sigs = signals_v3.generate_all_signals_v3(
+        # 시그널 생성 (OOP CompositeSignalEngine)
+        sigs = self._signal_engine.generate_all_signals(
             changes,
             poly_probs=poly_probs,
             pairs=today_pairs,
             sideways_active=self._sideways_active,
-            entry_threshold=config.V3_PAIR_GAP_ENTRY_THRESHOLD,
-            coin_trigger_pct=config.V3_COIN_TRIGGER_PCT,
-            coin_sell_profit_pct=config.COIN_SELL_PROFIT_PCT,
-            coin_sell_bearish_pct=config.COIN_SELL_BEARISH_PCT,
-            conl_trigger_pct=config.V3_CONL_TRIGGER_PCT,
-            conl_sell_profit_pct=config.CONL_SELL_PROFIT_PCT,
-            conl_sell_avg_pct=config.CONL_SELL_AVG_PCT,
         )
 
         gold_warning = sigs["gold"]["warning"]
@@ -581,18 +580,11 @@ class BacktestEngineV3(BacktestBase):
             elapsed = (ts - self._sideways_last_eval).total_seconds() / 60
             if elapsed < config.V3_SIDEWAYS_EVAL_INTERVAL_MIN:
                 return
-        result = signals_v3.evaluate_sideways(
+        result = self._signal_engine.sideways_detector.evaluate(
             poly_probs=poly_probs,
             changes=changes,
             gap_fail_count=self._gap_fail_count,
             trigger_fail_count=self._trigger_fail_count,
-            poly_low=config.V3_SIDEWAYS_POLY_LOW,
-            poly_high=config.V3_SIDEWAYS_POLY_HIGH,
-            gld_threshold=config.V3_SIDEWAYS_GLD_THRESHOLD,
-            gap_fail_threshold=config.V3_SIDEWAYS_GAP_FAIL_COUNT,
-            trigger_fail_threshold=config.V3_SIDEWAYS_TRIGGER_FAIL_COUNT,
-            index_threshold=config.V3_SIDEWAYS_INDEX_THRESHOLD,
-            min_signals=config.V3_SIDEWAYS_MIN_SIGNALS,
         )
         self._sideways_active = result["is_sideways"]
         self._sideways_last_eval = ts

@@ -17,7 +17,7 @@ Data:
 
 Dependencies:
   - config.py          : v4 parameters
-  - signals_v4.py      : v4 signal functions
+  - CompositeSignalEngine : OOP signal engine (replaced signals_v4.py)
   - backtest_common.py : shared utilities
   - backtest_base.py   : BacktestBase ABC
 """
@@ -38,7 +38,6 @@ import numpy as np
 import pandas as pd
 
 import config
-import signals_v4
 import backtest_common
 from backtest_base import BacktestBase
 
@@ -120,17 +119,24 @@ class BacktestEngineV4(BacktestBase):
         end_date: date = date(2026, 2, 17),
         use_fees: bool = True,
         params=None,
+        signal_engine=None,
     ):
         # Backward compat: build params from config if not provided
         if params is None:
             from strategies.params import v4_params_from_config
             params = v4_params_from_config()
 
+        # OOP signal engine: 기본값으로 CompositeSignalEngine 사용
+        if signal_engine is None:
+            from strategies.taejun_attach_pattern.composite_signal_engine import CompositeSignalEngine
+            signal_engine = CompositeSignalEngine.from_base_params(params)
+
         super().__init__(
             params=params,
             start_date=start_date,
             end_date=end_date,
             use_fees=use_fees,
+            signal_engine=signal_engine,
         )
 
     # Backward-compat aliases
@@ -308,7 +314,7 @@ class BacktestEngineV4(BacktestBase):
                 if px is not None:
                     first_prices_of_day[repl] = px
 
-        base_mode = signals_v4.determine_market_mode_v4(poly_probs, sideways_active=False)
+        base_mode = self._signal_engine.market_mode_filter.evaluate(poly_probs, sideways_active=False)
         self._process_crash_gap_open(trading_date, first_ts_of_day, first_prices_of_day)
         self._handle_carry_positions(day_sym, day_ts, base_mode, prev_close)
 
@@ -358,19 +364,12 @@ class BacktestEngineV4(BacktestBase):
             day_ctx["day_had_sideways"] = True
         self._evaluate_swing_mode(ts, changes, cur_prices)
 
-        # 시그널 생성 (v4)
-        sigs = signals_v4.generate_all_signals_v4(
+        # 시그널 생성 (OOP CompositeSignalEngine)
+        sigs = self._signal_engine.generate_all_signals(
             changes,
             poly_probs=poly_probs,
             pairs=today_pairs,
             sideways_active=self._sideways_active,
-            entry_threshold=config.V4_PAIR_GAP_ENTRY_THRESHOLD,
-            coin_trigger_pct=config.V4_COIN_TRIGGER_PCT,
-            coin_sell_profit_pct=config.COIN_SELL_PROFIT_PCT,
-            coin_sell_bearish_pct=config.COIN_SELL_BEARISH_PCT,
-            conl_trigger_pct=config.V4_CONL_TRIGGER_PCT,
-            conl_sell_profit_pct=config.CONL_SELL_PROFIT_PCT,
-            conl_sell_avg_pct=config.CONL_SELL_AVG_PCT,
         )
 
         gold_warning = sigs["gold"]["warning"]
@@ -1586,9 +1585,8 @@ class BacktestEngineV4(BacktestBase):
         intraday_range_pct = self._update_spy_intraday_range(cur_prices)
         indicators["range_narrow"] = intraday_range_pct <= config.V4_SIDEWAYS_RANGE_MAX_PCT
 
-        result = signals_v4.evaluate_sideways(
+        result = self._signal_engine.sideways_detector.evaluate(
             indicators=indicators,
-            min_signals=config.V4_SIDEWAYS_MIN_SIGNALS,
         )
 
         self._sideways_active = result["is_sideways"]

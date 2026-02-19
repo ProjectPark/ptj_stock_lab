@@ -10,14 +10,17 @@ Usage:
     signal = strat.generate_signal(market_data)
 """
 from .base import Action, BaseStrategy, ExitReason, MarketData, Position, Signal
+from .composite_signal_engine import CompositeSignalEngine
 from .d2s_engine import D2SEngine, DailySnapshot, D2SPosition, TechnicalPreprocessor
 from .fees import FeeCalculator, FeeConfig
 from .portfolio import PortfolioManager
 from .registry import get_strategy, list_strategies
+from .signal_presets import composite_from_base_params
 
 __all__ = [
     "Action",
     "BaseStrategy",
+    "CompositeSignalEngine",
     "D2SEngine",
     "D2SPosition",
     "DailySnapshot",
@@ -29,6 +32,7 @@ __all__ = [
     "Position",
     "Signal",
     "TechnicalPreprocessor",
+    "composite_from_base_params",
     "get_strategy",
     "list_strategies",
 ]
@@ -45,3 +49,7 @@ from . import sector_rotate as _sector_rotate  # noqa: F401, E402
 from . import bank_conditional as _bank_conditional  # noqa: F401, E402
 from . import short_macro as _short_macro  # noqa: F401, E402
 from . import reit_risk as _reit_risk  # noqa: F401, E402
+from . import twin_pair as _twin_pair  # noqa: F401, E402
+from . import conditional_coin as _conditional_coin  # noqa: F401, E402
+from . import conditional_conl as _conditional_conl  # noqa: F401, E402
+from . import bearish_defense as _bearish_defense  # noqa: F401, E402

@@ -431,7 +431,32 @@ class D2SEngine:
                 "reasons": quality["reasons"],
             })
 
-        # 리스크오프 매수 — 갭 후보가 없어도 강제 진입
+        # 단독 역발상 진입 — 종목 하락 + 기술적 유리 + 미스커버 종목
+        for ticker in self._tickers:
+            if ticker in seen_tickers:
+                continue
+            if daily_buy_counts.get(ticker, 0) >= self.p["dca_max_daily"]:
+                continue
+            ticker_pct = snap.changes.get(ticker, 0.0)
+            # 역발상: 종목이 하락 중이어야 단독 진입
+            if ticker_pct >= self.p["contrarian_entry_threshold"]:
+                continue
+            tech_ctx = self.check_technical_filter(ticker, snap)
+            if tech_ctx["blocked"]:
+                continue
+            quality = self.check_entry_quality(ticker, snap, market_ctx, tech_ctx)
+            # 단독 진입은 콤보 최적 또는 리스크오프일 때만
+            if quality["score"] >= 0.65:
+                seen_tickers.add(ticker)
+                buy_candidates.append({
+                    "ticker": ticker,
+                    "source": f"contrarian({ticker_pct:+.1f}%)",
+                    "score": quality["score"],
+                    "size_hint": quality["size_hint"],
+                    "reasons": quality["reasons"],
+                })
+
+        # 리스크오프 매수 — 갭/단독 후보가 없어도 강제 진입
         if market_ctx.get("riskoff_boost") and not buy_candidates:
             for ticker in self._tickers:
                 if ticker in seen_tickers:

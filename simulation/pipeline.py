@@ -18,7 +18,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from strategies.params import (
+from simulation.strategies.params import (
     BaseParams,
     V3Params,
     V4Params,
@@ -28,7 +28,7 @@ from strategies.params import (
     v4_params_from_config,
     v5_params_from_config,
 )
-from optimizers.optimizer_base import TrialResult, extract_metrics, extract_metrics_usd
+from simulation.optimizers.optimizer_base import TrialResult, extract_metrics, extract_metrics_usd
 
 # ============================================================
 # Lazy imports — 엔진/옵티마이저는 사용 시점에 로드
@@ -37,16 +37,16 @@ from optimizers.optimizer_base import TrialResult, extract_metrics, extract_metr
 def _import_engine(version: str):
     """버전별 백테스트 엔진 클래스를 lazy import."""
     if version == "v2":
-        from backtests.backtest_v2 import BacktestEngineV2
+        from simulation.backtests.backtest_v2 import BacktestEngineV2
         return BacktestEngineV2
     elif version == "v3":
-        from backtests.backtest_v3 import BacktestEngineV3
+        from simulation.backtests.backtest_v3 import BacktestEngineV3
         return BacktestEngineV3
     elif version == "v4":
-        from backtests.backtest_v4 import BacktestEngineV4
+        from simulation.backtests.backtest_v4 import BacktestEngineV4
         return BacktestEngineV4
     elif version == "v5":
-        from backtests.backtest_v5 import BacktestEngineV5
+        from simulation.backtests.backtest_v5 import BacktestEngineV5
         return BacktestEngineV5
     else:
         raise ValueError(f"Unknown engine version: {version}")
@@ -55,16 +55,16 @@ def _import_engine(version: str):
 def _import_optimizer(version: str):
     """버전별 옵티마이저 클래스를 lazy import."""
     if version == "v2":
-        from optimizers.optimize_v2_optuna import V2Optimizer
+        from simulation.optimizers.optimize_v2_optuna import V2Optimizer
         return V2Optimizer
     elif version == "v3":
-        from optimizers.optimize_v3_optuna import V3Optimizer
+        from simulation.optimizers.optimize_v3_optuna import V3Optimizer
         return V3Optimizer
     elif version == "v4":
-        from optimizers.optimize_v4_optuna import V4Optimizer
+        from simulation.optimizers.optimize_v4_optuna import V4Optimizer
         return V4Optimizer
     elif version == "v5":
-        from optimizers.optimize_v5_optuna import V5Optimizer
+        from simulation.optimizers.optimize_v5_optuna import V5Optimizer
         return V5Optimizer
     else:
         raise ValueError(f"Unknown optimizer version: {version}")

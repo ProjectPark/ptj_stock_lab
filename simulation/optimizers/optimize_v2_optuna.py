@@ -22,16 +22,15 @@ from io import StringIO
 from pathlib import Path
 from typing import Any
 
-_ROOT = Path(__file__).resolve().parent.parent
-for _p in [str(_ROOT), str(_ROOT / "backtests"), str(_ROOT / "strategies")]:
-    if _p not in sys.path:
-        sys.path.insert(0, _p)
+_PROJECT_ROOT = Path(__file__).resolve().parents[2]
+if str(_PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PROJECT_ROOT))
 
 import optuna
 from optuna.samplers import NSGAIISampler
 
 import config
-from optimizers.optimizer_base import BaseOptimizer, TrialResult, extract_metrics_usd
+from simulation.optimizers.optimizer_base import BaseOptimizer, TrialResult, extract_metrics_usd
 
 # ── Walk-forward 기간 설정 ─────────────────────────────────────────
 TRAIN_START = date(2025, 2, 18)
@@ -77,7 +76,7 @@ class V2Optimizer(BaseOptimizer):
 
     def create_engine(self, params: dict, **kwargs) -> Any:
         """v2 백테스트 엔진 인스턴스를 생성한다."""
-        from backtest_v2 import BacktestEngineV2
+        from simulation.backtests.backtest_v2 import BacktestEngineV2
         return BacktestEngineV2(**kwargs)
 
     def define_search_space(self, trial: optuna.Trial) -> dict:
@@ -95,7 +94,7 @@ class V2Optimizer(BaseOptimizer):
     def run_single_trial_usd(self, params: dict, start_date=None, end_date=None) -> TrialResult:
         """v2 USD 기반 백테스트 1회를 실행한다."""
         import config as _config
-        from backtest_v2 import BacktestEngineV2
+        from simulation.backtests.backtest_v2 import BacktestEngineV2
 
         originals = {}
         for key, value in params.items():

@@ -16,9 +16,8 @@ from datetime import datetime
 from pathlib import Path
 
 _ROOT = Path(__file__).resolve().parent.parent
-for _p in [str(_ROOT), str(_ROOT / "backtests"), str(_ROOT / "strategies")]:
-    if _p not in sys.path:
-        sys.path.insert(0, _p)
+if str(_ROOT) not in sys.path:
+    sys.path.insert(0, str(_ROOT))
 
 import config
 
@@ -76,8 +75,8 @@ BEST_PARAMS = {
 
 def run_backtest_with_best() -> dict:
     """Best Trial #388 파라미터로 백테스트 실행 후 상세 trade log 반환."""
-    import backtest_common
-    from backtest_v4 import BacktestEngineV4
+    from simulation.backtests import backtest_common
+    from simulation.backtests.backtest_v4 import BacktestEngineV4
 
     # config 파라미터 임시 교체
     originals = {}

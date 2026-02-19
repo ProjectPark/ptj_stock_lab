@@ -11,7 +11,7 @@ Usage:
 """
 from __future__ import annotations
 
-from strategies.params import BaseParams
+from ..params import BaseParams
 
 from .composite_signal_engine import CompositeSignalEngine
 

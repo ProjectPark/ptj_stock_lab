@@ -10,11 +10,10 @@ import sys
 from pathlib import Path
 
 _ROOT = Path(__file__).resolve().parent.parent
-for _p in [str(_ROOT), str(_ROOT / "backtests"), str(_ROOT / "strategies"), str(_ROOT / "optimizers")]:
-    if _p not in sys.path:
-        sys.path.insert(0, _p)
+if str(_ROOT) not in sys.path:
+    sys.path.insert(0, str(_ROOT))
 
-from optimize_v5_optuna import _get_baseline_params, _run_single_trial
+from simulation.optimizers.optimize_v5_optuna import _get_baseline_params, _run_single_trial
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 OUTPUT_JSON = PROJECT_ROOT / "data" / "v5_weight_experiments.json"

@@ -9,7 +9,7 @@
 ## 엔진 프로모션 워크플로우
 1. 이 repo에서 새 전략 개발 & backtest
 2. Optuna 최적화로 파라미터 확정
-3. `strategies/signals_vN.py`를 파라미터 주입 방식으로 정리
+3. `simulation/strategies/signals_vN.py`를 파라미터 주입 방식으로 정리
 4. `ptj_stock/backend/app/core/signals.py`에 복사 & 커밋
 5. `ptj_stock`에서 `make dev`로 로컬 테스트
 6. `git push` → iMac에 배포
@@ -22,9 +22,11 @@
 
 ```
 ptj_stock_lab/
-├── strategies/          # 시그널 엔진 (v1~v5)
-├── backtests/           # 백테스트 스크립트
-├── optimizers/          # Optuna 최적화
+├── simulation/          # 시뮬레이션 코어 패키지
+│   ├── strategies/      # 시그널 엔진 (v1~v5)
+│   ├── backtests/       # 백테스트 스크립트
+│   ├── optimizers/      # Optuna 최적화
+│   └── pipeline.py      # 통합 파이프라인 진입점
 ├── experiments/         # 실험, 분석, compliance 평가
 ├── fetchers/            # 데이터 수집 (KIS, Polygon, Polymarket)
 ├── polymarket/          # Polymarket 연동 모듈
@@ -67,19 +69,19 @@ ptj_stock_lab/
 ├── config.py            # 공통 설정
 ├── dashboard.py         # Streamlit 대시보드
 ├── app.py               # Legacy Streamlit app
-└── run.py               # 실행 진입점
+└── run.py               # 실행 진입점 (대시보드)
 ```
 
 ## 실행 예시
 
 ### 백테스트
 ```bash
-pyenv shell ptj_stock_lab && python backtests/backtest_v5.py
+pyenv shell ptj_stock_lab && python simulation/backtests/backtest_v5.py
 ```
 
 ### Optuna 최적화
 ```bash
-pyenv shell ptj_stock_lab && python optimizers/optimize_v5_optuna.py
+pyenv shell ptj_stock_lab && python simulation/optimizers/optimize_v5_optuna.py
 ```
 
 ### 대시보드
@@ -148,8 +150,8 @@ pyenv shell ptj_stock_lab && streamlit run dashboard.py
 ## 전략 버전 히스토리
 | 버전 | 파일 | 핵심 변경 |
 |---|---|---|
-| v1 | signals.py | 기본 5개 규칙 |
-| v2 | signals_v2.py | 파라미터화, 임계값 조정 |
-| v3 | signals_v3.py | Optuna 최적화 반영 |
-| v4 | signals_v4.py | 스윙 이벤트, CB 감지 추가 |
-| v5 | signals_v5.py | 횡보장 감지, 진입 시간 제한 |
+| v1 | simulation/strategies/signals.py | 기본 5개 규칙 |
+| v2 | simulation/strategies/signals_v2.py | 파라미터화, 임계값 조정 |
+| v3 | simulation/strategies/signals_v3.py | Optuna 최적화 반영 |
+| v4 | simulation/strategies/signals_v4.py | 스윙 이벤트, CB 감지 추가 |
+| v5 | simulation/strategies/signals_v5.py | 횡보장 감지, 진입 시간 제한 |

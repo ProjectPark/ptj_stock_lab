@@ -18,7 +18,7 @@ Usage:
 """
 from __future__ import annotations
 
-from strategies.params import BaseParams
+from ..params import BaseParams
 
 from .filters import GoldFilter, MarketModeFilter, SidewaysDetector
 from .twin_pair import TwinPairStrategy

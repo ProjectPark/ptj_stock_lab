@@ -28,11 +28,11 @@ class TestV1Engine:
     """v1 BacktestEngine (독립, 5분봉)."""
 
     def test_import(self):
-        from backtests.backtest import BacktestEngine
+        from simulation.backtests.backtest import BacktestEngine
         assert BacktestEngine is not None
 
     def test_instantiate(self):
-        from backtests.backtest import BacktestEngine
+        from simulation.backtests.backtest import BacktestEngine
         engine = BacktestEngine(
             initial_capital=1000.0,
             start_date=TEST_START,
@@ -43,12 +43,12 @@ class TestV1Engine:
         assert engine.cash == 1000.0
 
     def test_has_methods(self):
-        from backtests.backtest import BacktestEngine
+        from simulation.backtests.backtest import BacktestEngine
         for method in ["run", "print_report", "summary", "save_trade_log"]:
             assert hasattr(BacktestEngine, method), f"Missing: {method}"
 
     def test_run(self, test_period):
-        from backtests.backtest import BacktestEngine
+        from simulation.backtests.backtest import BacktestEngine
         start, end = test_period
         engine = BacktestEngine(
             initial_capital=1000.0,
@@ -62,7 +62,7 @@ class TestV1Engine:
         assert engine.total_trading_days > 0
 
     def test_metrics(self, test_period):
-        from backtests.backtest import BacktestEngine
+        from simulation.backtests.backtest import BacktestEngine
         start, end = test_period
         engine = BacktestEngine(
             initial_capital=1000.0,
@@ -89,13 +89,13 @@ class TestV2Engine:
     """v2 BacktestEngineV2 (BacktestBase 상속, 1분봉, USD)."""
 
     def test_import(self):
-        from backtests.backtest_v2 import BacktestEngineV2
+        from simulation.backtests.backtest_v2 import BacktestEngineV2
         # MRO에 BacktestBase가 포함되어야 함 (모듈 경로 차이로 issubclass 대신 이름 검사)
         mro_names = [c.__name__ for c in BacktestEngineV2.__mro__]
         assert "BacktestBase" in mro_names
 
     def test_instantiate(self):
-        from backtests.backtest_v2 import BacktestEngineV2
+        from simulation.backtests.backtest_v2 import BacktestEngineV2
         engine = BacktestEngineV2(
             start_date=TEST_START,
             end_date=TEST_END,
@@ -105,13 +105,13 @@ class TestV2Engine:
         assert engine._version_label() == "v2 USD"
 
     def test_backward_compat_properties(self):
-        from backtests.backtest_v2 import BacktestEngineV2
+        from simulation.backtests.backtest_v2 import BacktestEngineV2
         engine = BacktestEngineV2(start_date=TEST_START, end_date=TEST_END)
         assert engine.initial_capital_usd == engine.initial_capital
         assert engine.cash_usd == engine.cash
 
     def test_abstract_methods_implemented(self):
-        from backtests.backtest_v2 import BacktestEngineV2
+        from simulation.backtests.backtest_v2 import BacktestEngineV2
         for method in [
             "_init_version_state", "_load_extra_data", "_warmup_extra",
             "_on_day_start", "_on_bar", "_on_day_end", "_version_label",
@@ -119,7 +119,7 @@ class TestV2Engine:
             assert hasattr(BacktestEngineV2, method), f"Missing: {method}"
 
     def test_run(self, test_period):
-        from backtests.backtest_v2 import BacktestEngineV2
+        from simulation.backtests.backtest_v2 import BacktestEngineV2
         start, end = test_period
         engine = BacktestEngineV2(
             start_date=start, end_date=end, use_fees=True,
@@ -129,7 +129,7 @@ class TestV2Engine:
         assert engine.total_trading_days > 0
 
     def test_metrics(self, test_period):
-        from backtests.backtest_v2 import BacktestEngineV2
+        from simulation.backtests.backtest_v2 import BacktestEngineV2
         start, end = test_period
         engine = BacktestEngineV2(
             start_date=start, end_date=end, use_fees=True,
@@ -142,7 +142,7 @@ class TestV2Engine:
         assert isinstance(engine.calc_sharpe(), float)
 
     def test_trades_recorded(self, test_period):
-        from backtests.backtest_v2 import BacktestEngineV2
+        from simulation.backtests.backtest_v2 import BacktestEngineV2
         start, end = test_period
         engine = BacktestEngineV2(
             start_date=start, end_date=end, use_fees=True,
@@ -152,7 +152,7 @@ class TestV2Engine:
         assert len(engine.trades) > 0
 
     def test_fees_accumulated(self, test_period):
-        from backtests.backtest_v2 import BacktestEngineV2
+        from simulation.backtests.backtest_v2 import BacktestEngineV2
         start, end = test_period
         engine = BacktestEngineV2(
             start_date=start, end_date=end, use_fees=True,
@@ -169,12 +169,12 @@ class TestV3Engine:
     """v3 BacktestEngineV3 (BacktestBase 상속, 1분봉, KRW)."""
 
     def test_import(self):
-        from backtests.backtest_v3 import BacktestEngineV3
+        from simulation.backtests.backtest_v3 import BacktestEngineV3
         mro_names = [c.__name__ for c in BacktestEngineV3.__mro__]
         assert "BacktestBase" in mro_names
 
     def test_instantiate(self):
-        from backtests.backtest_v3 import BacktestEngineV3
+        from simulation.backtests.backtest_v3 import BacktestEngineV3
         engine = BacktestEngineV3(
             start_date=TEST_START, end_date=TEST_END,
         )
@@ -182,21 +182,21 @@ class TestV3Engine:
         assert engine._version_label() == "v3 선별 매매형"
 
     def test_fx_override(self):
-        from backtests.backtest_v3 import BacktestEngineV3
+        from simulation.backtests.backtest_v3 import BacktestEngineV3
         engine = BacktestEngineV3(start_date=TEST_START, end_date=TEST_END)
         # v3는 _get_fx_multiplier를 오버라이드
         assert "_get_fx_multiplier" in BacktestEngineV3.__dict__
         assert "_snapshot_equity" in BacktestEngineV3.__dict__
 
     def test_sideways_state_init(self):
-        from backtests.backtest_v3 import BacktestEngineV3
+        from simulation.backtests.backtest_v3 import BacktestEngineV3
         engine = BacktestEngineV3(start_date=TEST_START, end_date=TEST_END)
         assert hasattr(engine, "_sideways_active")
         assert engine._sideways_active is False
         assert engine.sideways_days == 0
 
     def test_run(self, test_period):
-        from backtests.backtest_v3 import BacktestEngineV3
+        from simulation.backtests.backtest_v3 import BacktestEngineV3
         start, end = test_period
         engine = BacktestEngineV3(
             start_date=start, end_date=end, use_fees=True,
@@ -206,7 +206,7 @@ class TestV3Engine:
         assert engine.total_trading_days > 0
 
     def test_metrics(self, test_period):
-        from backtests.backtest_v3 import BacktestEngineV3
+        from simulation.backtests.backtest_v3 import BacktestEngineV3
         start, end = test_period
         engine = BacktestEngineV3(
             start_date=start, end_date=end, use_fees=True,
@@ -218,7 +218,7 @@ class TestV3Engine:
         assert engine.calc_mdd() >= 0
 
     def test_v3_specific_stats(self, test_period):
-        from backtests.backtest_v3 import BacktestEngineV3
+        from simulation.backtests.backtest_v3 import BacktestEngineV3
         start, end = test_period
         engine = BacktestEngineV3(
             start_date=start, end_date=end, use_fees=True,
@@ -238,12 +238,12 @@ class TestV4Engine:
     """v4 BacktestEngineV4 (BacktestBase 상속, 1분봉, USD, CB/스윙)."""
 
     def test_import(self):
-        from backtests.backtest_v4 import BacktestEngineV4
+        from simulation.backtests.backtest_v4 import BacktestEngineV4
         mro_names = [c.__name__ for c in BacktestEngineV4.__mro__]
         assert "BacktestBase" in mro_names
 
     def test_instantiate(self):
-        from backtests.backtest_v4 import BacktestEngineV4
+        from simulation.backtests.backtest_v4 import BacktestEngineV4
         engine = BacktestEngineV4(
             start_date=TEST_START, end_date=TEST_END,
         )
@@ -251,7 +251,7 @@ class TestV4Engine:
         assert engine._version_label() == "v4 선별 매매형"
 
     def test_abstract_methods_implemented(self):
-        from backtests.backtest_v4 import BacktestEngineV4
+        from simulation.backtests.backtest_v4 import BacktestEngineV4
         for method in [
             "_init_version_state", "_load_extra_data", "_warmup_extra",
             "_on_day_start", "_on_bar", "_on_day_end", "_version_label",
@@ -259,12 +259,12 @@ class TestV4Engine:
             assert hasattr(BacktestEngineV4, method), f"Missing: {method}"
 
     def test_v4_specific_methods(self):
-        from backtests.backtest_v4 import BacktestEngineV4
+        from simulation.backtests.backtest_v4 import BacktestEngineV4
         for method in ["_process_sells", "_process_buys", "_augment_prices"]:
             assert hasattr(BacktestEngineV4, method), f"Missing: {method}"
 
     def test_run(self, test_period):
-        from backtests.backtest_v4 import BacktestEngineV4
+        from simulation.backtests.backtest_v4 import BacktestEngineV4
         start, end = test_period
         engine = BacktestEngineV4(
             start_date=start, end_date=end, use_fees=True,
@@ -274,7 +274,7 @@ class TestV4Engine:
         assert engine.total_trading_days > 0
 
     def test_metrics(self, test_period):
-        from backtests.backtest_v4 import BacktestEngineV4
+        from simulation.backtests.backtest_v4 import BacktestEngineV4
         start, end = test_period
         engine = BacktestEngineV4(
             start_date=start, end_date=end, use_fees=True,
@@ -287,7 +287,7 @@ class TestV4Engine:
         assert isinstance(engine.calc_sharpe(), float)
 
     def test_v4_specific_stats(self, test_period):
-        from backtests.backtest_v4 import BacktestEngineV4
+        from simulation.backtests.backtest_v4 import BacktestEngineV4
         start, end = test_period
         engine = BacktestEngineV4(
             start_date=start, end_date=end, use_fees=True,
@@ -303,14 +303,14 @@ class TestPipeline:
     """pipeline.py 통합 진입점 테스트."""
 
     def test_import(self):
-        from pipeline import run_backtest, get_metrics, export_for_inference
+        from simulation.pipeline import run_backtest, get_metrics, export_for_inference
         assert callable(run_backtest)
         assert callable(get_metrics)
         assert callable(export_for_inference)
 
     @pytest.mark.parametrize("version", ["v2", "v3", "v4"])
     def test_run_backtest(self, version, test_period):
-        from pipeline import run_backtest
+        from simulation.pipeline import run_backtest
         start, end = test_period
         engine = run_backtest(
             version,
@@ -324,7 +324,7 @@ class TestPipeline:
 
     @pytest.mark.parametrize("version", ["v2", "v3", "v4"])
     def test_get_metrics(self, version, test_period):
-        from pipeline import run_backtest, get_metrics
+        from simulation.pipeline import run_backtest, get_metrics
         start, end = test_period
         engine = run_backtest(
             version,
@@ -341,7 +341,7 @@ class TestPipeline:
 
     @pytest.mark.parametrize("version", ["v2", "v3", "v4"])
     def test_export_for_inference(self, version):
-        from pipeline import export_for_inference
+        from simulation.pipeline import export_for_inference
         result = export_for_inference(version)
         assert result["version"] == version
         assert "params" in result
@@ -356,19 +356,19 @@ class TestParams:
     """strategies/params.py 파라미터 관리 테스트."""
 
     def test_frozen_dataclass(self):
-        from strategies.params import BaseParams
+        from simulation.strategies.params import BaseParams
         p = BaseParams()
         with pytest.raises(AttributeError):
             p.total_capital = 999  # frozen이므로 mutation 불가
 
     def test_inheritance_chain(self):
-        from strategies.params import BaseParams, V3Params, V4Params, V5Params
+        from simulation.strategies.params import BaseParams, V3Params, V4Params, V5Params
         assert issubclass(V3Params, BaseParams)
         assert issubclass(V4Params, V3Params)
         assert issubclass(V5Params, V4Params)
 
     def test_to_dict_from_dict(self):
-        from strategies.params import V4Params
+        from simulation.strategies.params import V4Params
         p = V4Params()
         d = p.to_dict()
         assert isinstance(d, dict)
@@ -380,7 +380,7 @@ class TestParams:
         assert p2.stop_loss_pct == p.stop_loss_pct
 
     def test_from_config(self):
-        from strategies.params import (
+        from simulation.strategies.params import (
             v2_params_from_config, v3_params_from_config,
             v4_params_from_config, v5_params_from_config,
         )
@@ -395,7 +395,7 @@ class TestParams:
         assert p5.unix_defense_trigger_pct > 0
 
     def test_fee_config(self):
-        from strategies.params import FeeConfig
+        from simulation.strategies.params import FeeConfig
         fc = FeeConfig()
         assert fc.buy_fee_pct > 0
         assert fc.sell_fee_pct > 0

@@ -22,18 +22,17 @@ from datetime import datetime, date, time, timedelta
 import sys
 from pathlib import Path
 
-_ROOT = Path(__file__).resolve().parent.parent
-for _p in [str(_ROOT), str(_ROOT / "strategies")]:
-    if _p not in sys.path:
-        sys.path.insert(0, _p)
+_PROJECT_ROOT = Path(__file__).resolve().parents[2]
+if str(_PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PROJECT_ROOT))
 
 import numpy as np
 import pandas as pd
 
 import config
-import signals_v2
-import backtest_common
-from backtest_base import BacktestBase
+from simulation.strategies import signals_v2
+from simulation.backtests import backtest_common
+from simulation.backtests.backtest_base import BacktestBase
 
 # ============================================================
 # Constants
@@ -108,12 +107,12 @@ class BacktestEngineV2(BacktestBase):
     ):
         # Backward compat: build params from config if not provided
         if params is None:
-            from strategies.params import v2_params_from_config
+            from simulation.strategies.params import v2_params_from_config
             params = v2_params_from_config()
 
         # OOP signal engine: 기본값으로 CompositeSignalEngine 사용
         if signal_engine is None:
-            from strategies.taejun_attach_pattern.composite_signal_engine import CompositeSignalEngine
+            from simulation.strategies.taejun_attach_pattern.composite_signal_engine import CompositeSignalEngine
             signal_engine = CompositeSignalEngine.from_base_params(params)
 
         super().__init__(

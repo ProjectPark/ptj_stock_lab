@@ -7,13 +7,12 @@ from pathlib import Path
 
 _ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(_ROOT))
-for _p in [str(_ROOT / "fetchers"), str(_ROOT / "strategies")]:
-    if _p not in sys.path:
-        sys.path.insert(0, _p)
+if str(_ROOT / "fetchers") not in sys.path:
+    sys.path.insert(0, str(_ROOT / "fetchers"))
 
 import config
 import fetch_data
-import signals
+from simulation.strategies import signals
 import dashboard_html
 
 

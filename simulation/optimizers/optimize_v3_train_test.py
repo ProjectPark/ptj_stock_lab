@@ -16,16 +16,15 @@ import time
 from datetime import date, datetime
 from pathlib import Path
 
-_ROOT = Path(__file__).resolve().parent.parent
-for _p in [str(_ROOT), str(_ROOT / "backtests"), str(_ROOT / "strategies")]:
-    if _p not in sys.path:
-        sys.path.insert(0, _p)
+_PROJECT_ROOT = Path(__file__).resolve().parents[2]
+if str(_PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PROJECT_ROOT))
 
 import optuna
 from optuna.samplers import TPESampler
 
 import config
-from optimizers.optimizer_base import BaseOptimizer, TrialResult, extract_metrics
+from simulation.optimizers.optimizer_base import BaseOptimizer, TrialResult, extract_metrics
 
 # ── Train/Test 기간 설정 ──────────────────────────────────────
 
@@ -54,7 +53,7 @@ class TrainTestObjective:
         self.gap_max = gap_max
         self.trial_count = 0
         # V3Optimizer를 임포트하여 run_single_trial 재사용
-        from optimizers.optimize_v3_optuna import V3Optimizer
+        from simulation.optimizers.optimize_v3_optuna import V3Optimizer
         self._optimizer = V3Optimizer(gap_max=gap_max)
 
     def _define_wide_search_space(self, trial: optuna.Trial) -> dict:
@@ -307,7 +306,7 @@ study.optimize(objective, n_trials={n_trials // n_jobs + 1}, show_progress_bar=F
     print()
 
     # Train/Test 기간 상세 결과 (재실행 via run_single_trial)
-    from optimizers.optimize_v3_optuna import V3Optimizer
+    from simulation.optimizers.optimize_v3_optuna import V3Optimizer
     opt = V3Optimizer(gap_max=gap_max)
 
     train_result = opt.run_single_trial(best_params, start_date=TRAIN_START, end_date=TRAIN_END)

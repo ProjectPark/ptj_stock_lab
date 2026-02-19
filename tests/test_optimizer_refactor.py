@@ -12,9 +12,8 @@ from unittest.mock import MagicMock
 import pytest
 
 _ROOT = Path(__file__).resolve().parent.parent
-for _p in [str(_ROOT), str(_ROOT / "backtests"), str(_ROOT / "strategies")]:
-    if _p not in sys.path:
-        sys.path.insert(0, _p)
+if str(_ROOT) not in sys.path:
+    sys.path.insert(0, str(_ROOT))
 
 
 # ============================================================
@@ -25,14 +24,14 @@ for _p in [str(_ROOT), str(_ROOT / "backtests"), str(_ROOT / "strategies")]:
 class TestSharedParams:
     def test_keys_count(self):
         """공유 파라미터 11개 확인."""
-        from optimizers.shared_params import get_shared_baseline_params
+        from simulation.optimizers.shared_params import get_shared_baseline_params
 
         params = get_shared_baseline_params()
         assert len(params) == 11
 
     def test_expected_keys(self):
         """11개 키 이름이 정확한지 확인."""
-        from optimizers.shared_params import get_shared_baseline_params
+        from simulation.optimizers.shared_params import get_shared_baseline_params
 
         params = get_shared_baseline_params()
         expected = {
@@ -52,8 +51,8 @@ class TestSharedParams:
 
     def test_v3_includes_shared(self):
         """V3Optimizer.get_baseline_params()에 공유 키 포함 확인."""
-        from optimizers.optimize_v3_optuna import V3Optimizer
-        from optimizers.shared_params import get_shared_baseline_params
+        from simulation.optimizers.optimize_v3_optuna import V3Optimizer
+        from simulation.optimizers.shared_params import get_shared_baseline_params
 
         opt = V3Optimizer()
         baseline = opt.get_baseline_params()
@@ -64,8 +63,8 @@ class TestSharedParams:
 
     def test_v4_includes_shared(self):
         """V4Optimizer.get_baseline_params()에 공유 키 포함 확인."""
-        from optimizers.optimize_v4_optuna import V4Optimizer
-        from optimizers.shared_params import get_shared_baseline_params
+        from simulation.optimizers.optimize_v4_optuna import V4Optimizer
+        from simulation.optimizers.shared_params import get_shared_baseline_params
 
         opt = V4Optimizer()
         baseline = opt.get_baseline_params()
@@ -76,8 +75,8 @@ class TestSharedParams:
 
     def test_v5_includes_shared(self):
         """V5Optimizer.get_baseline_params()에 공유 키 포함 확인."""
-        from optimizers.optimize_v5_optuna import V5Optimizer
-        from optimizers.shared_params import get_shared_baseline_params
+        from simulation.optimizers.optimize_v5_optuna import V5Optimizer
+        from simulation.optimizers.shared_params import get_shared_baseline_params
 
         opt = V5Optimizer()
         baseline = opt.get_baseline_params()
@@ -130,7 +129,7 @@ def _make_mock_study(n_trials: int = 5) -> MagicMock:
 class TestReportSections:
     def test_section_execution_info(self):
         """실행 정보 섹션이 올바른 마크다운을 생성하는지 확인."""
-        from optimizers.report_sections import section_execution_info
+        from simulation.optimizers.report_sections import section_execution_info
 
         study = _make_mock_study()
         lines = section_execution_info(study, elapsed=120.0, n_jobs=6, version="v5")
@@ -141,7 +140,7 @@ class TestReportSections:
 
     def test_section_execution_info_extra_rows(self):
         """extra_rows가 추가되는지 확인."""
-        from optimizers.report_sections import section_execution_info
+        from simulation.optimizers.report_sections import section_execution_info
 
         study = _make_mock_study()
         lines = section_execution_info(
@@ -154,7 +153,7 @@ class TestReportSections:
 
     def test_section_baseline_vs_best(self):
         """Baseline vs Best 섹션 생성 확인."""
-        from optimizers.report_sections import section_baseline_vs_best
+        from simulation.optimizers.report_sections import section_baseline_vs_best
 
         study = _make_mock_study()
         baseline = {
@@ -175,7 +174,7 @@ class TestReportSections:
 
     def test_section_importance_empty_study(self):
         """trial 5개 미만 시 빈 리스트 반환."""
-        from optimizers.report_sections import section_importance
+        from simulation.optimizers.report_sections import section_importance
 
         study = _make_mock_study(n_trials=3)
         lines = section_importance(study)
@@ -183,7 +182,7 @@ class TestReportSections:
 
     def test_build_report_structure(self):
         """build_report()가 올바른 마크다운 헤더 포함."""
-        from optimizers.report_sections import build_report
+        from simulation.optimizers.report_sections import build_report
 
         section1 = ["## 1. 테스트", "", "내용"]
         section2 = ["## 2. 테스트2", "", "내용2"]
@@ -194,7 +193,7 @@ class TestReportSections:
 
     def test_section_train_test(self):
         """Train/Test 섹션 생성 확인."""
-        from optimizers.report_sections import section_train_test
+        from simulation.optimizers.report_sections import section_train_test
 
         test_results = [
             {
@@ -233,29 +232,29 @@ class TestReportSections:
 class TestHooks:
     def test_v5_uses_base_run_stage2(self):
         """V5Optimizer가 run_stage2()를 오버라이드하지 않는지 확인."""
-        from optimizers.optimize_v5_optuna import V5Optimizer
-        from optimizers.optimizer_base import BaseOptimizer
+        from simulation.optimizers.optimize_v5_optuna import V5Optimizer
+        from simulation.optimizers.optimizer_base import BaseOptimizer
 
         assert V5Optimizer.run_stage2 is BaseOptimizer.run_stage2
 
     def test_v3_no_run_stage2_override(self):
         """V3Optimizer가 더 이상 run_stage2()를 오버라이드하지 않는지 확인."""
-        from optimizers.optimize_v3_optuna import V3Optimizer
-        from optimizers.optimizer_base import BaseOptimizer
+        from simulation.optimizers.optimize_v3_optuna import V3Optimizer
+        from simulation.optimizers.optimizer_base import BaseOptimizer
 
         assert V3Optimizer.run_stage2 is BaseOptimizer.run_stage2
 
     def test_v4_no_run_stage2_override(self):
         """V4Optimizer가 더 이상 run_stage2()를 오버라이드하지 않는지 확인."""
-        from optimizers.optimize_v4_optuna import V4Optimizer
-        from optimizers.optimizer_base import BaseOptimizer
+        from simulation.optimizers.optimize_v4_optuna import V4Optimizer
+        from simulation.optimizers.optimizer_base import BaseOptimizer
 
         assert V4Optimizer.run_stage2 is BaseOptimizer.run_stage2
 
     def test_v3_has_progress_callbacks(self):
         """V3Optimizer가 _get_progress_callbacks()를 오버라이드하는지 확인."""
-        from optimizers.optimize_v3_optuna import V3Optimizer
-        from optimizers.optimizer_base import BaseOptimizer
+        from simulation.optimizers.optimize_v3_optuna import V3Optimizer
+        from simulation.optimizers.optimizer_base import BaseOptimizer
 
         assert V3Optimizer._get_progress_callbacks is not BaseOptimizer._get_progress_callbacks
         opt = V3Optimizer()
@@ -265,34 +264,34 @@ class TestHooks:
 
     def test_v4_has_pre_optimize_setup(self):
         """V4Optimizer가 _pre_optimize_setup()를 오버라이드하는지 확인."""
-        from optimizers.optimize_v4_optuna import V4Optimizer
-        from optimizers.optimizer_base import BaseOptimizer
+        from simulation.optimizers.optimize_v4_optuna import V4Optimizer
+        from simulation.optimizers.optimizer_base import BaseOptimizer
 
         assert V4Optimizer._pre_optimize_setup is not BaseOptimizer._pre_optimize_setup
 
     def test_v4_has_post_optimize(self):
         """V4Optimizer가 _post_optimize()를 오버라이드하는지 확인."""
-        from optimizers.optimize_v4_optuna import V4Optimizer
-        from optimizers.optimizer_base import BaseOptimizer
+        from simulation.optimizers.optimize_v4_optuna import V4Optimizer
+        from simulation.optimizers.optimizer_base import BaseOptimizer
 
         assert V4Optimizer._post_optimize is not BaseOptimizer._post_optimize
 
     def test_v4_has_report_sections(self):
         """V4Optimizer가 _get_report_sections()를 오버라이드하는지 확인."""
-        from optimizers.optimize_v4_optuna import V4Optimizer
-        from optimizers.optimizer_base import BaseOptimizer
+        from simulation.optimizers.optimize_v4_optuna import V4Optimizer
+        from simulation.optimizers.optimizer_base import BaseOptimizer
 
         assert V4Optimizer._get_report_sections is not BaseOptimizer._get_report_sections
 
     def test_v4_no_make_v4_objective(self):
         """V4Optimizer에 _make_v4_objective가 더 이상 없는지 확인."""
-        from optimizers.optimize_v4_optuna import V4Optimizer
+        from simulation.optimizers.optimize_v4_optuna import V4Optimizer
 
         assert not hasattr(V4Optimizer, "_make_v4_objective")
 
     def test_base_make_objective_passes_kwargs(self):
         """base _make_objective가 kwargs를 run_single_trial에 전달하는지 확인."""
-        from optimizers.optimizer_base import BaseOptimizer
+        from simulation.optimizers.optimizer_base import BaseOptimizer
 
         # _make_objective의 kwargs 전달 확인을 위한 간접 테스트
         # (실제 엔진 없이 서명만 확인)
@@ -306,7 +305,7 @@ class TestHooks:
 
     def test_base_pre_optimize_returns_zero(self):
         """base _pre_optimize_setup이 0을 반환하는지 확인."""
-        from optimizers.optimize_v5_optuna import V5Optimizer
+        from simulation.optimizers.optimize_v5_optuna import V5Optimizer
 
         opt = V5Optimizer()
         mock_study = MagicMock()

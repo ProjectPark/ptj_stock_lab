@@ -14,9 +14,8 @@ import pytest
 
 # 프로젝트 루트를 path에 추가
 _ROOT = Path(__file__).resolve().parent.parent
-for _p in [str(_ROOT), str(_ROOT / "backtests"), str(_ROOT / "strategies")]:
-    if _p not in sys.path:
-        sys.path.insert(0, _p)
+if str(_ROOT) not in sys.path:
+    sys.path.insert(0, str(_ROOT))
 
 
 # ============================================================

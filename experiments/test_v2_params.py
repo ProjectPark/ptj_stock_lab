@@ -13,13 +13,12 @@ from dataclasses import dataclass
 from pathlib import Path
 
 _ROOT = Path(__file__).resolve().parent.parent
-for _p in [str(_ROOT), str(_ROOT / "backtests"), str(_ROOT / "strategies")]:
-    if _p not in sys.path:
-        sys.path.insert(0, _p)
+if str(_ROOT) not in sys.path:
+    sys.path.insert(0, str(_ROOT))
 
 import config
-import backtest_common
-from backtest_v2 import BacktestEngineV2
+from simulation.backtests import backtest_common
+from simulation.backtests.backtest_v2 import BacktestEngineV2
 
 
 # ============================================================

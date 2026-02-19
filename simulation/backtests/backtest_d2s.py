@@ -17,23 +17,22 @@ from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 
-_ROOT = Path(__file__).resolve().parent.parent
-if str(_ROOT) not in sys.path:
-    sys.path.insert(0, str(_ROOT))
+_PROJECT_ROOT = Path(__file__).resolve().parents[2]
+if str(_PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PROJECT_ROOT))
 
 import numpy as np
 import pandas as pd
 
-sys.path.insert(0, str(_ROOT / "backtests"))
-import backtest_common
+from simulation.backtests import backtest_common
 
-from strategies.taejun_attach_pattern.d2s_engine import (
+from simulation.strategies.taejun_attach_pattern.d2s_engine import (
     D2SEngine,
     D2SPosition,
     DailySnapshot,
     TechnicalPreprocessor,
 )
-from strategies.taejun_attach_pattern.params import D2S_ENGINE
+from simulation.strategies.taejun_attach_pattern.params import D2S_ENGINE
 
 # ============================================================
 # 수수료 상수

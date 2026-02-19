@@ -18,16 +18,15 @@ import sys
 from pathlib import Path
 from typing import Any
 
-_ROOT = Path(__file__).resolve().parent.parent
-for _p in [str(_ROOT), str(_ROOT / "backtests"), str(_ROOT / "strategies")]:
-    if _p not in sys.path:
-        sys.path.insert(0, _p)
+_PROJECT_ROOT = Path(__file__).resolve().parents[2]
+if str(_PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PROJECT_ROOT))
 
 import optuna
 
 import config
-from optimizers.optimizer_base import BaseOptimizer, TrialResult
-from optimizers.shared_params import get_shared_baseline_params
+from simulation.optimizers.optimizer_base import BaseOptimizer, TrialResult
+from simulation.optimizers.shared_params import get_shared_baseline_params
 
 
 # ============================================================
@@ -76,7 +75,7 @@ class V5Optimizer(BaseOptimizer):
 
     def create_engine(self, params: dict, **kwargs) -> Any:
         """v5 백테스트 엔진 인스턴스를 생성한다."""
-        from backtest_v5 import BacktestEngineV5
+        from simulation.backtests.backtest_v5 import BacktestEngineV5
         return BacktestEngineV5(**kwargs)
 
     def define_search_space(self, trial: optuna.Trial) -> dict:

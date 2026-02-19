@@ -17,6 +17,7 @@ Usage:
 from __future__ import annotations
 
 import json
+import sys
 import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
@@ -27,8 +28,12 @@ from typing import Any
 import optuna
 from optuna.samplers import TPESampler
 
+_PROJECT_ROOT = Path(__file__).resolve().parents[2]
+if str(_PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PROJECT_ROOT))
+
 import config
-from optimizers import report_sections as rs
+from simulation.optimizers import report_sections as rs
 
 # ============================================================
 # TrialResult
@@ -115,7 +120,7 @@ def extract_metrics(engine: Any) -> TrialResult:
     일관되므로 (initial_capital_krw, equity_curve, trades, ...) 단일
     함수로 추출 가능하다.
     """
-    import backtest_common
+    from simulation.backtests import backtest_common
 
     initial = engine.initial_capital_krw
     final = engine.equity_curve[-1][1] if engine.equity_curve else initial
@@ -186,7 +191,7 @@ def extract_metrics(engine: Any) -> TrialResult:
 
 def extract_metrics_usd(engine: Any) -> TrialResult:
     """USD 기반 v2 엔진에서 TrialResult 지표를 추출한다."""
-    import backtest_common
+    from simulation.backtests import backtest_common
 
     initial = engine.initial_capital_usd
     final = engine.equity_curve[-1][1] if engine.equity_curve else initial

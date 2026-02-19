@@ -21,16 +21,16 @@ import sys
 from datetime import date
 from pathlib import Path
 
-_ROOT = Path(__file__).resolve().parent.parent
-if str(_ROOT) not in sys.path:
-    sys.path.insert(0, str(_ROOT))
+_PROJECT_ROOT = Path(__file__).resolve().parents[2]
+if str(_PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PROJECT_ROOT))
 
 import numpy as np
 
-from strategies.taejun_attach_pattern.params import D2S_ENGINE_V2
-from strategies.taejun_attach_pattern.d2s_engine import D2SPosition, DailySnapshot
+from simulation.strategies.taejun_attach_pattern.params import D2S_ENGINE_V2
+from simulation.strategies.taejun_attach_pattern.d2s_engine import D2SPosition, DailySnapshot
 
-from backtests.backtest_d2s import D2SBacktest, TradeRecord, BUY_FEE_PCT, SELL_FEE_PCT
+from simulation.backtests.backtest_d2s import D2SBacktest, TradeRecord, BUY_FEE_PCT, SELL_FEE_PCT
 
 
 class D2SBacktestV2(D2SBacktest):
@@ -324,7 +324,7 @@ class D2SBacktestV2(D2SBacktest):
 # ============================================================
 
 def main():
-    from backtests.backtest_d2s import D2SBacktest
+    from simulation.backtests.backtest_d2s import D2SBacktest
 
     print("=" * 60)
     print("  [v1] attach v1 기준선")

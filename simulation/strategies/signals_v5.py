@@ -13,7 +13,7 @@ v2 시그널 함수를 재사용하고, v5 고유 로직만 추가.
 
 from __future__ import annotations
 
-import signals_v2
+from . import signals_v2
 
 
 # ---------------------------------------------------------------------------

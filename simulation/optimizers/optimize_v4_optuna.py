@@ -41,18 +41,17 @@ import sys
 from pathlib import Path
 from typing import Any
 
-_ROOT = Path(__file__).resolve().parent.parent
-for _p in [str(_ROOT), str(_ROOT / "backtests"), str(_ROOT / "strategies")]:
-    if _p not in sys.path:
-        sys.path.insert(0, _p)
+_PROJECT_ROOT = Path(__file__).resolve().parents[2]
+if str(_PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PROJECT_ROOT))
 
 import optuna
 from optuna.samplers import TPESampler
 
 import config
-from optimizers.optimizer_base import BaseOptimizer, TrialResult
-from optimizers.shared_params import get_shared_baseline_params
-from optimizers import report_sections as rs
+from simulation.optimizers.optimizer_base import BaseOptimizer, TrialResult
+from simulation.optimizers.shared_params import get_shared_baseline_params
+from simulation.optimizers import report_sections as rs
 
 
 # ============================================================
@@ -78,7 +77,7 @@ class V4Optimizer(BaseOptimizer):
         self.phase = phase
         self.train_end = train_end
         # v4 리포트 경로 추가
-        self._optuna_reports_dir = _ROOT / "docs" / "reports" / "optuna"
+        self._optuna_reports_dir = _PROJECT_ROOT / "docs" / "reports" / "optuna"
 
     def get_baseline_params(self) -> dict:
         """현재 config.py에 설정된 v4 파라미터를 반환한다."""
@@ -130,7 +129,7 @@ class V4Optimizer(BaseOptimizer):
 
     def create_engine(self, params: dict, **kwargs) -> Any:
         """v4 백테스트 엔진 인스턴스를 생성한다."""
-        from backtest_v4 import BacktestEngineV4
+        from simulation.backtests.backtest_v4 import BacktestEngineV4
         from datetime import date as _date
 
         engine_kwargs: dict = {}

@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import argparse
 import multiprocessing as mp
-import subprocess
 import sys
 from pathlib import Path
 from typing import Any
@@ -28,6 +27,7 @@ import optuna
 
 import config
 from optimizers.optimizer_base import BaseOptimizer, TrialResult
+from optimizers.shared_params import get_shared_baseline_params
 
 
 # ============================================================
@@ -65,17 +65,7 @@ class V3Optimizer(BaseOptimizer):
             "V3_SIDEWAYS_TRIGGER_FAIL_COUNT": config.V3_SIDEWAYS_TRIGGER_FAIL_COUNT,
             "V3_SIDEWAYS_INDEX_THRESHOLD": config.V3_SIDEWAYS_INDEX_THRESHOLD,
             # v2 공유
-            "STOP_LOSS_PCT": config.STOP_LOSS_PCT,
-            "STOP_LOSS_BULLISH_PCT": config.STOP_LOSS_BULLISH_PCT,
-            "COIN_SELL_PROFIT_PCT": config.COIN_SELL_PROFIT_PCT,
-            "COIN_SELL_BEARISH_PCT": config.COIN_SELL_BEARISH_PCT,
-            "CONL_SELL_PROFIT_PCT": config.CONL_SELL_PROFIT_PCT,
-            "CONL_SELL_AVG_PCT": config.CONL_SELL_AVG_PCT,
-            "DCA_DROP_PCT": config.DCA_DROP_PCT,
-            "MAX_HOLD_HOURS": config.MAX_HOLD_HOURS,
-            "TAKE_PROFIT_PCT": config.TAKE_PROFIT_PCT,
-            "PAIR_GAP_SELL_THRESHOLD_V2": config.PAIR_GAP_SELL_THRESHOLD_V2,
-            "PAIR_SELL_FIRST_PCT": config.PAIR_SELL_FIRST_PCT,
+            **get_shared_baseline_params(),
             "INITIAL_BUY_KRW": config.INITIAL_BUY_KRW,
             "DCA_BUY_KRW": config.DCA_BUY_KRW,
         }
@@ -122,131 +112,13 @@ class V3Optimizer(BaseOptimizer):
         }
         return params
 
-    def run_stage2(
-        self,
-        n_trials: int = 20,
-        n_jobs: int = 6,
-        timeout: int | None = None,
-        study_name: str | None = None,
-        db: str | None = None,
-        baseline: dict | None = None,
-        baseline_params: dict | None = None,
-        **kwargs,
-    ) -> None:
-        """Stage 2: v3 Optuna 최적화 (subprocess 병렬 지원)."""
-        if study_name is None:
-            study_name = "ptj_v3_opt"
-
-        # baseline 로드
-        if baseline is None or baseline_params is None:
-            baseline, baseline_params = self.load_baseline_json()
-            print(f"  Baseline 로드: {self._baseline_json}")
-            print(f"  Baseline 수익률: {baseline['total_return_pct']:+.2f}%")
-
-        print(f"\n{'=' * 70}")
-        print(f"  [Stage 2] Optuna 최적화 ({n_trials} trials, {n_jobs} workers, GAP max {self.gap_max}%)")
-        print(f"{'=' * 70}")
-
-        from optuna.samplers import TPESampler
-        import time
-
-        sampler = TPESampler(seed=42, n_startup_trials=min(10, n_trials))
-        storage = db if db else None
-
-        study = optuna.create_study(
-            study_name=study_name,
-            direction="maximize",
-            sampler=sampler,
-            storage=storage,
-            load_if_exists=True,
-        )
-
-        study.enqueue_trial(baseline_params)
-
-        t0 = time.time()
-
-        objective = self._make_objective(**kwargs)
-
-        def _log_progress(study, trial):
+    def _get_progress_callbacks(self, n_trials: int) -> list:
+        """v3: 진행 상황 로깅 콜백."""
+        def _log(study, trial):
             if trial.number % 10 == 0 or trial.number < 5:
                 best = study.best_trial
                 print(f"  [{trial.number:3d}/{n_trials}] Best: Trial #{best.number} ({best.value:+.2f}%)")
-
-        # v3는 subprocess 기반 병렬화를 사용
-        if n_jobs > 1 and storage:
-            print(f"  병렬 실행: {n_jobs} 프로세스 수동 실행")
-            processes = []
-            for i in range(n_jobs):
-                if i == 0:
-                    continue
-                cmd = [
-                    sys.executable,
-                    "-c",
-                    f"""
-import optuna
-from optimize_v3_optuna import V3Optimizer
-opt = V3Optimizer(gap_max={self.gap_max})
-study = optuna.load_study(study_name='{study_name}', storage='{storage}')
-objective = opt._make_objective()
-study.optimize(objective, n_trials={n_trials // n_jobs + 1}, show_progress_bar=False)
-"""
-                ]
-                p = subprocess.Popen(cmd, cwd=str(Path(__file__).parent))
-                processes.append(p)
-
-            study.optimize(
-                objective,
-                n_trials=n_trials // n_jobs + 1,
-                timeout=timeout,
-                show_progress_bar=False,
-                callbacks=[_log_progress],
-            )
-
-            for p in processes:
-                p.wait()
-        else:
-            study.optimize(
-                objective,
-                n_trials=n_trials,
-                timeout=timeout,
-                show_progress_bar=True,
-                callbacks=[_log_progress],
-            )
-
-        elapsed = time.time() - t0
-
-        # 콘솔 요약
-        completed = [t for t in study.trials if t.state == optuna.trial.TrialState.COMPLETE]
-        if completed:
-            best = study.best_trial
-            diff = best.value - baseline["total_return_pct"]
-            print(f"\n  실행 시간: {elapsed:.1f}초 ({elapsed / 60:.1f}분)")
-            print(f"  Trial당 평균: {elapsed / len(study.trials):.1f}초")
-            print(f"\n  BEST Trial #{best.number}")
-            print(f"  수익률  : {best.value:+.2f}%  (baseline 대비 {diff:+.2f}%)")
-            print(f"  MDD     : -{best.user_attrs.get('mdd', 0):.2f}%")
-            print(f"  Sharpe  : {best.user_attrs.get('sharpe', 0):.4f}")
-            print(f"  승률    : {best.user_attrs.get('win_rate', 0):.1f}%")
-
-            top5 = sorted(completed, key=lambda t: t.value, reverse=True)[:5]
-            print(f"\n  Top 5:")
-            print(f"  {'#':>4s}  {'수익률':>8s}  {'MDD':>8s}  {'Sharpe':>8s}  {'승률':>6s}")
-            for t in top5:
-                print(
-                    f"  {t.number:4d}  {t.value:+7.2f}%"
-                    f"  -{t.user_attrs.get('mdd', 0):6.2f}%"
-                    f"  {t.user_attrs.get('sharpe', 0):>8.4f}"
-                    f"  {t.user_attrs.get('win_rate', 0):>5.1f}%"
-                )
-        else:
-            print("\n  완료된 trial 없음")
-            return
-
-        # 마크다운 리포트
-        self._docs_dir.mkdir(parents=True, exist_ok=True)
-        md = self._generate_optuna_report(study, baseline, baseline_params, elapsed, n_jobs)
-        self._optuna_report.write_text(md, encoding="utf-8")
-        print(f"\n  Optuna 리포트: {self._optuna_report}")
+        return [_log]
 
 
 # ── 워커 함수 (mp.Pool 호환) ──────────────────────────────────

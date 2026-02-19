@@ -28,6 +28,7 @@ import optuna
 from optuna.samplers import TPESampler
 
 import config
+from optimizers import report_sections as rs
 
 # ============================================================
 # TrialResult
@@ -359,6 +360,29 @@ class BaseOptimizer(ABC):
 
         return result, params
 
+    # ── 훅 메서드 (서브클래스 오버라이드 가능) ──────────────────
+
+    def _pre_optimize_setup(self, study, baseline_params, **kwargs) -> int:
+        """study.optimize() 전 준비 (warm start, enqueue 등).
+
+        Returns: 이미 실행 완료된 trial 수.
+        """
+        study.enqueue_trial(baseline_params)
+        return 0
+
+    def _get_progress_callbacks(self, n_trials: int) -> list:
+        """progress callback 리스트. 기본: 빈 리스트."""
+        return []
+
+    def _post_optimize(self, study, baseline, baseline_params, elapsed, n_jobs, **kwargs) -> None:
+        """optimize 후 추가 작업. 기본: 마크다운 리포트 저장."""
+        md = self._generate_optuna_report(
+            study, baseline, baseline_params, elapsed, n_jobs, **kwargs
+        )
+        self._docs_dir.mkdir(parents=True, exist_ok=True)
+        self._optuna_report.write_text(md, encoding="utf-8")
+        print(f"\n  Optuna 리포트: {self._optuna_report}")
+
     # ── Stage 2: Optuna ───────────────────────────────────────
 
     def run_stage2(
@@ -397,32 +421,42 @@ class BaseOptimizer(ABC):
             load_if_exists=True,
         )
 
-        # baseline 파라미터를 첫 trial로 enqueue
-        study.enqueue_trial(baseline_params)
+        # 훅 1: pre-optimize (warm start / enqueue)
+        already_done = self._pre_optimize_setup(study, baseline_params, **kwargs)
+
+        # 훅 2: objective (kwargs 전달)
+        obj_kwargs = {k: v for k, v in kwargs.items() if k in ("end_date",)}
+        objective = self._make_objective(**obj_kwargs)
+
+        # 훅 3: callbacks
+        callbacks = self._get_progress_callbacks(n_trials)
 
         t0 = time.time()
 
-        objective = self._make_objective(**kwargs)
-
-        if n_jobs > 1:
+        remaining = n_trials - already_done
+        if remaining <= 0:
+            print(f"  목표 trial {n_trials}회 이미 완료됨 (완료: {already_done}회)")
+        elif n_jobs > 1:
             import multiprocessing as mp
             ctx = mp.get_context("spawn")
             with ctx.Pool(processes=n_jobs) as pool:
                 self._pool = pool
                 study.optimize(
                     objective,
-                    n_trials=n_trials,
+                    n_trials=remaining,
                     timeout=timeout,
                     show_progress_bar=True,
+                    callbacks=callbacks or None,
                 )
                 self._pool = None
         else:
             self._pool = None
             study.optimize(
                 objective,
-                n_trials=n_trials,
+                n_trials=remaining,
                 timeout=timeout,
                 show_progress_bar=True,
+                callbacks=callbacks or None,
             )
 
         elapsed = time.time() - t0
@@ -433,7 +467,7 @@ class BaseOptimizer(ABC):
             best = study.best_trial
             diff = best.value - baseline["total_return_pct"]
             print(f"\n  실행 시간: {elapsed:.1f}초 ({elapsed / 60:.1f}분)")
-            print(f"  Trial당 평균: {elapsed / len(study.trials):.1f}초")
+            print(f"  Trial당 평균: {elapsed / max(len(study.trials), 1):.1f}초")
             print(f"\n  BEST Trial #{best.number}")
             print(f"  수익률  : {best.value:+.2f}%  (baseline 대비 {diff:+.2f}%)")
             print(f"  MDD     : -{best.user_attrs.get('mdd', 0):.2f}%")
@@ -454,22 +488,22 @@ class BaseOptimizer(ABC):
             print("\n  완료된 trial 없음")
             return
 
-        # 마크다운 리포트
-        self._docs_dir.mkdir(parents=True, exist_ok=True)
-        md = self._generate_optuna_report(study, baseline, baseline_params, elapsed, n_jobs)
-        self._optuna_report.write_text(md, encoding="utf-8")
-        print(f"\n  Optuna 리포트: {self._optuna_report}")
+        # 훅 4: post-optimize (리포트 + 추가 작업)
+        self._post_optimize(study, baseline, baseline_params, elapsed, n_jobs, **kwargs)
 
     # ── Objective 생성 ────────────────────────────────────────
 
     def _make_objective(self, **kwargs):
-        """Optuna objective callable을 반환한다."""
+        """Optuna objective callable을 반환한다.
+
+        **kwargs는 run_single_trial()에 전달된다 (예: end_date).
+        """
         optimizer = self
 
         class _Objective:
             def __call__(self_obj, trial: optuna.Trial) -> float:
                 params = optimizer.define_search_space(trial)
-                result = optimizer.run_single_trial(params)
+                result = optimizer.run_single_trial(params, **kwargs)
                 # 지표 기록
                 for attr_key, value in optimizer.get_trial_user_attrs(result).items():
                     trial.set_user_attr(attr_key, value)
@@ -603,6 +637,26 @@ class BaseOptimizer(ABC):
 
     # ── 마크다운 리포트 생성 (Optuna) ─────────────────────────
 
+    def _get_report_sections(
+        self,
+        study: optuna.Study,
+        baseline: dict,
+        baseline_params: dict,
+        elapsed: float,
+        n_jobs: int,
+        **kwargs,
+    ) -> list[list[str]]:
+        """리포트 섹션 리스트. 서브클래스에서 오버라이드하여 섹션 추가/교체."""
+        return [
+            rs.section_execution_info(study, elapsed, n_jobs, self.version),
+            rs.section_baseline_vs_best(study, baseline),
+            rs.section_best_params(study, baseline_params),
+            rs.section_top5_table(study),
+            rs.section_importance(study),
+            rs.section_top5_detail(study),
+            rs.section_config_code(study),
+        ]
+
     def _generate_optuna_report(
         self,
         study: optuna.Study,
@@ -610,143 +664,13 @@ class BaseOptimizer(ABC):
         baseline_params: dict,
         elapsed: float,
         n_jobs: int,
+        **kwargs,
     ) -> str:
         """Optuna 마크다운 리포트를 생성한다."""
-        ver = self.version
-        completed = [t for t in study.trials if t.state == optuna.trial.TrialState.COMPLETE]
-        failed = [t for t in study.trials if t.state == optuna.trial.TrialState.FAIL]
-        best = study.best_trial
-        bl = baseline
-        diff_ret = best.value - bl["total_return_pct"]
-
-        lines = [
-            f"# PTJ {ver} Optuna 최적화 리포트",
-            "",
-            f"> 생성일: {datetime.now().strftime('%Y-%m-%d %H:%M')}",
-            "",
-            "## 1. 실행 정보",
-            "",
-            "| 항목 | 값 |",
-            "|---|---|",
-            f"| 총 Trial | {len(study.trials)} (완료: {len(completed)}, 실패: {len(failed)}) |",
-            f"| 병렬 Worker | {n_jobs} |",
-            f"| 실행 시간 | {elapsed:.1f}초 ({elapsed / 60:.1f}분) |",
-        ]
-        if study.trials:
-            lines.append(f"| Trial당 평균 | {elapsed / len(study.trials):.1f}초 |")
-        lines += [
-            f"| Sampler | TPE (seed=42) |",
-            "",
-            "## 2. Baseline vs Best 비교",
-            "",
-            "| 지표 | Baseline | Best (#{best.number}) | 차이 |",
-            "|---|---|---|---|",
-            f"| **수익률** | {bl['total_return_pct']:+.2f}% | **{best.value:+.2f}%** | {diff_ret:+.2f}% |",
-            f"| MDD | -{bl['mdd']:.2f}% | -{best.user_attrs.get('mdd', 0):.2f}% | {best.user_attrs.get('mdd', 0) - bl['mdd']:+.2f}% |",
-            f"| Sharpe | {bl['sharpe']:.4f} | {best.user_attrs.get('sharpe', 0):.4f} | {best.user_attrs.get('sharpe', 0) - bl['sharpe']:+.4f} |",
-            f"| 승률 | {bl['win_rate']:.1f}% | {best.user_attrs.get('win_rate', 0):.1f}% | {best.user_attrs.get('win_rate', 0) - bl['win_rate']:+.1f}% |",
-            f"| 매도 횟수 | {bl['total_sells']} | {best.user_attrs.get('total_sells', 0)} | {best.user_attrs.get('total_sells', 0) - bl['total_sells']:+d} |",
-            f"| 손절 횟수 | {bl['stop_loss_count']} | {best.user_attrs.get('stop_loss_count', 0)} | {best.user_attrs.get('stop_loss_count', 0) - bl['stop_loss_count']:+d} |",
-            f"| 시간손절 | {bl['time_stop_count']} | {best.user_attrs.get('time_stop_count', 0)} | {best.user_attrs.get('time_stop_count', 0) - bl['time_stop_count']:+d} |",
-            f"| 횡보장 일수 | {bl['sideways_days']} | {best.user_attrs.get('sideways_days', 0)} | {best.user_attrs.get('sideways_days', 0) - bl['sideways_days']:+d} |",
-            f"| 수수료 | {bl['total_fees']:,.0f}원 | {best.user_attrs.get('total_fees', 0):,.0f}원 | {best.user_attrs.get('total_fees', 0) - bl['total_fees']:+,.0f}원 |",
-            "",
-            f"## 3. 최적 파라미터 (Best Trial #{best.number})",
-            "",
-            "| 파라미터 | 최적값 | Baseline | 변경 |",
-            "|---|---|---|---|",
-        ]
-        for key, value in sorted(best.params.items()):
-            bl_val = baseline_params.get(key, "N/A")
-            changed = ""
-            if isinstance(bl_val, (int, float)):
-                if isinstance(value, float):
-                    changed = f"{value - bl_val:+.2f}" if value != bl_val else "-"
-                else:
-                    changed = f"{value - bl_val:+d}" if value != bl_val else "-"
-            if isinstance(value, float):
-                bl_str = f"{bl_val:.2f}" if isinstance(bl_val, float) else str(bl_val)
-                lines.append(f"| `{key}` | **{value:.2f}** | {bl_str} | {changed} |")
-            elif isinstance(value, int) and value >= 1_000_000:
-                bl_str = f"{bl_val:,}" if isinstance(bl_val, int) else str(bl_val)
-                lines.append(f"| `{key}` | **{value:,}** | {bl_str} | {changed} |")
-            else:
-                lines.append(f"| `{key}` | **{value}** | {bl_val} | {changed} |")
-
-        # Top 5
-        top5 = sorted(completed, key=lambda t: t.value, reverse=True)[:5]
-        lines += [
-            "",
-            "## 4. Top 5 Trials",
-            "",
-            "| # | 수익률 | MDD | Sharpe | 승률 | 매도 | 손절 | 횡보일 |",
-            "|---|---|---|---|---|---|---|---|",
-        ]
-        for t in top5:
-            lines.append(
-                f"| {t.number} | {t.value:+.2f}% "
-                f"| -{t.user_attrs.get('mdd', 0):.2f}% "
-                f"| {t.user_attrs.get('sharpe', 0):.4f} "
-                f"| {t.user_attrs.get('win_rate', 0):.1f}% "
-                f"| {t.user_attrs.get('total_sells', 0)} "
-                f"| {t.user_attrs.get('stop_loss_count', 0)} "
-                f"| {t.user_attrs.get('sideways_days', 0)} |"
-            )
-
-        # Parameter importance
-        if len(completed) >= 5:
-            try:
-                importance = optuna.importance.get_param_importances(study)
-                lines += [
-                    "",
-                    "## 5. 파라미터 중요도 (fANOVA)",
-                    "",
-                    "| 파라미터 | 중요도 |",
-                    "|---|---|",
-                ]
-                for param, score in sorted(importance.items(), key=lambda x: -x[1]):
-                    bar = "█" * int(score * 30)
-                    lines.append(f"| `{param}` | {score:.4f} {bar} |")
-            except Exception:
-                pass
-
-        # Top 5 파라미터 상세
-        lines += [
-            "",
-            "## 6. Top 5 파라미터 상세",
-            "",
-        ]
-        for rank, t in enumerate(top5, 1):
-            lines.append(f"### #{rank} — Trial {t.number} ({t.value:+.2f}%)")
-            lines.append("")
-            lines.append("```")
-            for key, value in sorted(t.params.items()):
-                if isinstance(value, float):
-                    lines.append(f"{key} = {value:.2f}")
-                elif isinstance(value, int) and value >= 1_000_000:
-                    lines.append(f"{key} = {value:_}")
-                else:
-                    lines.append(f"{key} = {value}")
-            lines.append("```")
-            lines.append("")
-
-        # config.py 적용 코드
-        lines += [
-            "## 7. config.py 적용 코드 (Best Trial)",
-            "",
-            "```python",
-        ]
-        for key, value in sorted(best.params.items()):
-            if isinstance(value, int):
-                if value >= 1_000_000:
-                    lines.append(f"{key} = {value:_}")
-                else:
-                    lines.append(f"{key} = {value}")
-            else:
-                lines.append(f"{key} = {value:.2f}" if abs(value) >= 0.01 else f"{key} = {value}")
-        lines += ["```", ""]
-
-        return "\n".join(lines)
+        sections = self._get_report_sections(
+            study, baseline, baseline_params, elapsed, n_jobs, **kwargs
+        )
+        return rs.build_report(self.version, sections)
 
 
 # ============================================================

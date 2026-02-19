@@ -27,6 +27,7 @@ import optuna
 
 import config
 from optimizers.optimizer_base import BaseOptimizer, TrialResult
+from optimizers.shared_params import get_shared_baseline_params
 
 
 # ============================================================
@@ -70,17 +71,7 @@ class V5Optimizer(BaseOptimizer):
             "V5_CB_BTC_CRASH_PCT": config.V5_CB_BTC_CRASH_PCT,
             "V5_CB_BTC_SURGE_PCT": config.V5_CB_BTC_SURGE_PCT,
             # v2 공유
-            "STOP_LOSS_PCT": config.STOP_LOSS_PCT,
-            "STOP_LOSS_BULLISH_PCT": config.STOP_LOSS_BULLISH_PCT,
-            "COIN_SELL_PROFIT_PCT": config.COIN_SELL_PROFIT_PCT,
-            "COIN_SELL_BEARISH_PCT": config.COIN_SELL_BEARISH_PCT,
-            "CONL_SELL_PROFIT_PCT": config.CONL_SELL_PROFIT_PCT,
-            "CONL_SELL_AVG_PCT": config.CONL_SELL_AVG_PCT,
-            "DCA_DROP_PCT": config.DCA_DROP_PCT,
-            "MAX_HOLD_HOURS": config.MAX_HOLD_HOURS,
-            "TAKE_PROFIT_PCT": config.TAKE_PROFIT_PCT,
-            "PAIR_GAP_SELL_THRESHOLD_V2": config.PAIR_GAP_SELL_THRESHOLD_V2,
-            "PAIR_SELL_FIRST_PCT": config.PAIR_SELL_FIRST_PCT,
+            **get_shared_baseline_params(),
         }
 
     def create_engine(self, params: dict, **kwargs) -> Any:

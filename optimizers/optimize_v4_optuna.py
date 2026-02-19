@@ -38,7 +38,6 @@ import argparse
 import multiprocessing as mp
 import time
 import sys
-from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -51,7 +50,9 @@ import optuna
 from optuna.samplers import TPESampler
 
 import config
-from optimizers.optimizer_base import BaseOptimizer, TrialResult, extract_metrics
+from optimizers.optimizer_base import BaseOptimizer, TrialResult
+from optimizers.shared_params import get_shared_baseline_params
+from optimizers import report_sections as rs
 
 
 # ============================================================
@@ -124,17 +125,7 @@ class V4Optimizer(BaseOptimizer):
             "V4_PAIR_IMMEDIATE_SELL_PCT": config.V4_PAIR_IMMEDIATE_SELL_PCT,
             "V4_PAIR_FIXED_TP_PCT": config.V4_PAIR_FIXED_TP_PCT,
             # Group A: v2 공유 파라미터
-            "STOP_LOSS_PCT": config.STOP_LOSS_PCT,
-            "STOP_LOSS_BULLISH_PCT": config.STOP_LOSS_BULLISH_PCT,
-            "COIN_SELL_PROFIT_PCT": config.COIN_SELL_PROFIT_PCT,
-            "COIN_SELL_BEARISH_PCT": config.COIN_SELL_BEARISH_PCT,
-            "CONL_SELL_PROFIT_PCT": config.CONL_SELL_PROFIT_PCT,
-            "CONL_SELL_AVG_PCT": config.CONL_SELL_AVG_PCT,
-            "DCA_DROP_PCT": config.DCA_DROP_PCT,
-            "MAX_HOLD_HOURS": config.MAX_HOLD_HOURS,
-            "TAKE_PROFIT_PCT": config.TAKE_PROFIT_PCT,
-            "PAIR_GAP_SELL_THRESHOLD_V2": config.PAIR_GAP_SELL_THRESHOLD_V2,
-            "PAIR_SELL_FIRST_PCT": config.PAIR_SELL_FIRST_PCT,
+            **get_shared_baseline_params(),
         }
 
     def create_engine(self, params: dict, **kwargs) -> Any:
@@ -150,26 +141,6 @@ class V4Optimizer(BaseOptimizer):
             ed = kwargs["end_date"]
             engine_kwargs["end_date"] = _date.fromisoformat(ed) if isinstance(ed, str) else ed
         return BacktestEngineV4(**engine_kwargs)
-
-    def run_single_trial(self, params: dict, **kwargs) -> TrialResult:
-        """v4 백테스트 1회를 실행하고 지표를 반환한다.
-
-        train_end가 설정된 경우 end_date로 전달한다.
-        """
-        import config as _config
-
-        originals = {}
-        for key, value in params.items():
-            originals[key] = getattr(_config, key)
-            setattr(_config, key, value)
-
-        try:
-            engine = self.create_engine(params, **kwargs)
-            engine.run(verbose=False)
-            return extract_metrics(engine)
-        finally:
-            for key, value in originals.items():
-                setattr(_config, key, value)
 
     def define_search_space(self, trial: optuna.Trial) -> dict:
         """v4 Optuna 탐색 공간을 정의한다 (Group A~F)."""
@@ -306,157 +277,71 @@ class V4Optimizer(BaseOptimizer):
 
         return result, params
 
-    # ── Stage 2: Optuna (v4 전용 병렬/warm start) ─────────────
+    # ── 훅 오버라이드 ─────────────────────────────────────────
 
-    def run_stage2(
-        self,
-        n_trials: int = 400,
-        n_jobs: int = 10,
-        timeout: int | None = None,
-        study_name: str | None = None,
-        db: str | None = None,
-        baseline: dict | None = None,
-        baseline_params: dict | None = None,
-        test_start: str | None = None,
-        test_end: str | None = None,
-        phase1_db: str | None = None,
-        phase1_study: str = "ptj_v4_phase1",
-        **kwargs,
-    ) -> None:
-        """Stage 2: v4 Optuna 최적화."""
-        if study_name is None:
-            study_name = "ptj_v4_opt"
+    def _pre_optimize_setup(self, study, baseline_params, **kwargs) -> int:
+        """v4: Phase 1/2 warm start + baseline enqueue + warm-up 순차 실행."""
+        already_done = len([
+            t for t in study.trials if t.state == optuna.trial.TrialState.COMPLETE
+        ])
+        if already_done > 0:
+            return already_done
 
-        # baseline 로드
-        if baseline is None or baseline_params is None:
-            baseline, baseline_params = self.load_baseline_json()
-            print(f"  Baseline 로드: {self._baseline_json}")
-            print(f"  Baseline 수익률: {baseline['total_return_pct']:+.2f}%")
+        phase1_db = kwargs.get("phase1_db")
+        phase1_study = kwargs.get("phase1_study", "ptj_v4_phase1")
 
-        print(f"\n{'=' * 70}")
-        print(f"  [Stage 2] Optuna 최적화 ({n_trials} trials, {n_jobs} workers)")
-        print(f"  Phase: {self.phase} | 목적함수: {self.objective_mode} | GAP max: {self.gap_max}%")
-        if self.train_end:
-            print(f"  Train 기간: ~ {self.train_end}  /  Test 기간: {test_start or 'N/A'} ~ {test_end or '기본값'}")
-        print(f"{'=' * 70}")
-
-        sampler = TPESampler(seed=42, n_startup_trials=min(20, n_trials))
-        storage = db if db else None
-
-        study = optuna.create_study(
-            study_name=study_name,
-            direction="maximize",
-            sampler=sampler,
-            storage=storage,
-            load_if_exists=True,
-        )
-
-        # warm start / baseline enqueue
-        already_done = len([t for t in study.trials if t.state == optuna.trial.TrialState.COMPLETE])
-        warmup_needed = 0
-
-        if already_done == 0:
-            # Phase 2: Phase 1 best를 warm start로, Phase 1: v3 warm start
-            if self.phase >= 2 and phase1_db:
-                warm_start = _get_phase1_best_params(phase1_db, phase1_study)
-                if not warm_start:
-                    warm_start = _get_v3_warm_start()
-                    print(f"  [FALLBACK] v3 warm start 사용")
-                else:
-                    import config as _config
-                    warm_start.setdefault("V4_SWING_TRIGGER_PCT", _config.V4_SWING_TRIGGER_PCT)
-                    warm_start.setdefault("V4_SWING_STAGE1_DRAWDOWN_PCT", _config.V4_SWING_STAGE1_DRAWDOWN_PCT)
-                    warm_start.setdefault("V4_SWING_STAGE1_ATR_MULT", _config.V4_SWING_STAGE1_ATR_MULT)
-            else:
+        # Phase 2: Phase 1 best를 warm start로, Phase 1: v3 warm start
+        if self.phase >= 2 and phase1_db:
+            warm_start = _get_phase1_best_params(phase1_db, phase1_study)
+            if not warm_start:
                 warm_start = _get_v3_warm_start()
-
-            study.enqueue_trial(warm_start)
-            label = "Phase 1 best" if (self.phase >= 2 and phase1_db) else "v3"
-            print(f"  {label} warm start enqueue 완료 (Trial #0)")
-
-            # baseline도 Phase 2 swing 파라미터 보충
-            if self.phase >= 2:
-                import config as _config
-                bp2 = dict(baseline_params)
-                bp2.setdefault("V4_SWING_TRIGGER_PCT", _config.V4_SWING_TRIGGER_PCT)
-                bp2.setdefault("V4_SWING_STAGE1_DRAWDOWN_PCT", _config.V4_SWING_STAGE1_DRAWDOWN_PCT)
-                bp2.setdefault("V4_SWING_STAGE1_ATR_MULT", _config.V4_SWING_STAGE1_ATR_MULT)
-                study.enqueue_trial(bp2)
+                print("  [FALLBACK] v3 warm start 사용")
             else:
-                study.enqueue_trial(baseline_params)
-            print(f"  baseline enqueue 완료 (Trial #1)")
-            warmup_needed = 2
-
-        if warmup_needed > 0:
-            print(f"  warm-up {warmup_needed}개 trial 순차 실행 중...")
-            obj_single = self._make_v4_objective()
-            study.optimize(obj_single, n_trials=warmup_needed, show_progress_bar=False)
-            already_done = len([t for t in study.trials if t.state == optuna.trial.TrialState.COMPLETE])
-            print(f"  warm-up 완료 (총 완료: {already_done}회)")
-
-        t0 = time.time()
-
-        remaining = n_trials - already_done
-        if remaining <= 0:
-            print(f"  목표 trial {n_trials}회 이미 완료됨 (완료: {already_done}회)")
-        elif n_jobs > 1:
-            if not db:
-                raise ValueError(
-                    "n_jobs > 1 병렬 실행에는 --db 옵션이 필요합니다 (SQLite 공유 저장소).\n"
-                    "예: --db sqlite:///data/optuna/optuna_v4_phase1.db"
-                )
-            n_trials_per_worker = max(1, remaining // n_jobs)
-            remainder_extra = remaining - n_trials_per_worker * n_jobs
-            print(f"  남은 trials: {remaining}  워커당: {n_trials_per_worker} x {n_jobs}")
-
-            ctx = mp.get_context("spawn")
-            worker_trials = [n_trials_per_worker + remainder_extra] + [n_trials_per_worker] * (n_jobs - 1)
-            worker_args = [
-                (study_name, storage, wt, self.gap_max, self.objective_mode, self.phase, self.train_end)
-                for wt in worker_trials
-            ]
-            with ctx.Pool(processes=n_jobs) as pool:
-                pool.starmap(_study_worker, worker_args)
-
-            study = optuna.load_study(study_name=study_name, storage=storage)
+                import config as _config
+                warm_start.setdefault("V4_SWING_TRIGGER_PCT", _config.V4_SWING_TRIGGER_PCT)
+                warm_start.setdefault("V4_SWING_STAGE1_DRAWDOWN_PCT", _config.V4_SWING_STAGE1_DRAWDOWN_PCT)
+                warm_start.setdefault("V4_SWING_STAGE1_ATR_MULT", _config.V4_SWING_STAGE1_ATR_MULT)
         else:
-            obj = self._make_v4_objective()
-            study.optimize(
-                obj,
-                n_trials=remaining,
-                timeout=timeout,
-                show_progress_bar=True,
-            )
+            warm_start = _get_v3_warm_start()
 
-        elapsed = time.time() - t0
+        study.enqueue_trial(warm_start)
+        label = "Phase 1 best" if (self.phase >= 2 and phase1_db) else "v3"
+        print(f"  {label} warm start enqueue 완료 (Trial #0)")
 
-        # 콘솔 요약
-        completed = [t for t in study.trials if t.state == optuna.trial.TrialState.COMPLETE]
-        if completed:
-            best = study.best_trial
-            print(f"\n  실행 시간: {elapsed:.1f}초 ({elapsed / 60:.1f}분)")
-            print(f"  Trial당 평균: {elapsed / max(len(study.trials), 1):.1f}초")
-            print(f"\n  BEST Trial #{best.number}  (score={best.value:+.2f})")
-            print(f"  MDD     : -{best.user_attrs.get('mdd', 0):.2f}%")
-            print(f"  Sharpe  : {best.user_attrs.get('sharpe', 0):.4f}")
-            print(f"  승률    : {best.user_attrs.get('win_rate', 0):.1f}%")
-
-            top5 = sorted(completed, key=lambda t: t.value, reverse=True)[:5]
-            print(f"\n  Top 5:")
-            print(f"  {'#':>4s}  {'Score':>8s}  {'MDD':>8s}  {'Sharpe':>8s}  {'승률':>6s}")
-            for t in top5:
-                print(
-                    f"  {t.number:4d}  {t.value:+7.2f}"
-                    f"  -{t.user_attrs.get('mdd', 0):6.2f}%"
-                    f"  {t.user_attrs.get('sharpe', 0):>8.4f}"
-                    f"  {t.user_attrs.get('win_rate', 0):>5.1f}%"
-                )
+        # baseline도 Phase 2 swing 파라미터 보충
+        if self.phase >= 2:
+            import config as _config
+            bp2 = dict(baseline_params)
+            bp2.setdefault("V4_SWING_TRIGGER_PCT", _config.V4_SWING_TRIGGER_PCT)
+            bp2.setdefault("V4_SWING_STAGE1_DRAWDOWN_PCT", _config.V4_SWING_STAGE1_DRAWDOWN_PCT)
+            bp2.setdefault("V4_SWING_STAGE1_ATR_MULT", _config.V4_SWING_STAGE1_ATR_MULT)
+            study.enqueue_trial(bp2)
         else:
-            print("\n  완료된 trial 없음")
-            return
+            study.enqueue_trial(baseline_params)
+        print("  baseline enqueue 완료 (Trial #1)")
+
+        # warm-up 순차 실행
+        warmup_needed = 2
+        print(f"  warm-up {warmup_needed}개 trial 순차 실행 중...")
+        obj_kwargs = {}
+        if self.train_end:
+            obj_kwargs["end_date"] = self.train_end
+        obj_single = self._make_objective(**obj_kwargs)
+        study.optimize(obj_single, n_trials=warmup_needed, show_progress_bar=False)
+        already_done = len([
+            t for t in study.trials if t.state == optuna.trial.TrialState.COMPLETE
+        ])
+        print(f"  warm-up 완료 (총 완료: {already_done}회)")
+        return already_done
+
+    def _post_optimize(self, study, baseline, baseline_params, elapsed, n_jobs, **kwargs):
+        """v4: test split 평가 + Phase별 커스텀 리포트 경로."""
+        test_start = kwargs.get("test_start")
+        test_end = kwargs.get("test_end")
 
         # Test 기간 평가
         test_results = None
+        completed = [t for t in study.trials if t.state == optuna.trial.TrialState.COMPLETE]
         if test_start and completed:
             print(f"\n  Test 기간 평가 중 ({test_start} ~ {test_end or '기본값'})...")
             test_results = _eval_test_split(
@@ -475,7 +360,7 @@ class V4Optimizer(BaseOptimizer):
                     )
 
         # 마크다운 리포트
-        md = self._generate_v4_optuna_report(
+        md = self._generate_optuna_report(
             study, baseline, baseline_params, elapsed, n_jobs,
             test_results=test_results, test_start=test_start, test_end=test_end,
         )
@@ -488,208 +373,44 @@ class V4Optimizer(BaseOptimizer):
         report_path.write_text(md, encoding="utf-8")
         print(f"\n  Optuna 리포트: {report_path}")
 
-    def _make_v4_objective(self):
-        """v4 전용 objective (train_end 지원)."""
-        optimizer = self
-
-        class _V4Objective:
-            def __call__(self_obj, trial: optuna.Trial) -> float:
-                params = optimizer.define_search_space(trial)
-                kwargs = {}
-                if optimizer.train_end:
-                    kwargs["end_date"] = optimizer.train_end
-                result = optimizer.run_single_trial(params, **kwargs)
-                for attr_key, value in optimizer.get_trial_user_attrs(result).items():
-                    trial.set_user_attr(attr_key, value)
-                return optimizer.calc_score(result)
-
-        return _V4Objective()
-
-    def _generate_v4_optuna_report(
-        self,
-        study: optuna.Study,
-        baseline: dict,
-        baseline_params: dict,
-        elapsed: float,
-        n_jobs: int,
-        test_results: list[dict] | None = None,
-        test_start: str | None = None,
-        test_end: str | None = None,
-    ) -> str:
-        """v4 Optuna 마크다운 리포트를 생성한다."""
-        completed = [t for t in study.trials if t.state == optuna.trial.TrialState.COMPLETE]
-        failed = [t for t in study.trials if t.state == optuna.trial.TrialState.FAIL]
-        best = study.best_trial
-        bl = baseline
-        best_score = best.value
-        bl_ret = bl["total_return_pct"]
-
+    def _get_report_sections(self, study, baseline, baseline_params, elapsed, n_jobs, **kwargs):
+        """v4: 실행 정보에 Phase/목적함수/기간 추가, CB 차단 비교행 추가."""
         opt_period = "전체 기간"
         if self.train_end:
             opt_period = f"Train 기간 (~ {self.train_end})"
 
-        lines = [
-            "# PTJ v4 Optuna 최적화 리포트",
-            "",
-            f"> 생성일: {datetime.now().strftime('%Y-%m-%d %H:%M')}",
-            "",
-            "## 1. 실행 정보",
-            "",
-            "| 항목 | 값 |",
-            "|---|---|",
-            f"| Phase | {self.phase} |",
-            f"| 총 Trial | {len(study.trials)} (완료: {len(completed)}, 실패: {len(failed)}) |",
-            f"| 병렬 Worker | {n_jobs} |",
-            f"| 실행 시간 | {elapsed:.1f}초 ({elapsed / 60:.1f}분) |",
-            f"| Trial당 평균 | {elapsed / max(len(study.trials), 1):.1f}초 |",
-            f"| Sampler | TPE (seed=42) |",
-            f"| 목적함수 모드 | {self.objective_mode} |",
-            f"| 최적화 기간 | {opt_period} |",
+        extra_exec_rows = [
+            ("Phase", str(self.phase)),
+            ("목적함수 모드", self.objective_mode),
+            ("최적화 기간", opt_period),
         ]
-        if test_start:
-            lines.append(f"| Test 기간 | {test_start} ~ {test_end or '엔진 기본값'} |")
-
-        lines += [
-            "",
-            "## 2. Baseline vs Best 비교",
-            "",
-            "| 지표 | Baseline | Best | 차이 |",
-            "|---|---|---|---|",
-            f"| **수익률** | {bl_ret:+.2f}% | **{best_score:+.2f}** (score) | {best_score - bl_ret:+.2f} |",
-            f"| MDD | -{bl['mdd']:.2f}% | -{best.user_attrs.get('mdd', 0):.2f}% | {best.user_attrs.get('mdd', 0) - bl['mdd']:+.2f}% |",
-            f"| Sharpe | {bl['sharpe']:.4f} | {best.user_attrs.get('sharpe', 0):.4f} | {best.user_attrs.get('sharpe', 0) - bl['sharpe']:+.4f} |",
-            f"| 승률 | {bl['win_rate']:.1f}% | {best.user_attrs.get('win_rate', 0):.1f}% | {best.user_attrs.get('win_rate', 0) - bl['win_rate']:+.1f}% |",
-            f"| 매도 횟수 | {bl['total_sells']} | {best.user_attrs.get('total_sells', 0)} | {best.user_attrs.get('total_sells', 0) - bl['total_sells']:+d} |",
-            f"| 손절 횟수 | {bl['stop_loss_count']} | {best.user_attrs.get('stop_loss_count', 0)} | {best.user_attrs.get('stop_loss_count', 0) - bl['stop_loss_count']:+d} |",
-            f"| 시간손절 | {bl['time_stop_count']} | {best.user_attrs.get('time_stop_count', 0)} | {best.user_attrs.get('time_stop_count', 0) - bl['time_stop_count']:+d} |",
-            f"| 횡보장 일수 | {bl['sideways_days']} | {best.user_attrs.get('sideways_days', 0)} | {best.user_attrs.get('sideways_days', 0) - bl['sideways_days']:+d} |",
-            f"| CB 차단 | {bl.get('cb_buy_blocks', 0)} | {best.user_attrs.get('cb_buy_blocks', 0)} | {best.user_attrs.get('cb_buy_blocks', 0) - bl.get('cb_buy_blocks', 0):+d} |",
-            f"| 수수료 | {bl['total_fees']:,.0f}원 | {best.user_attrs.get('total_fees', 0):,.0f}원 | {best.user_attrs.get('total_fees', 0) - bl['total_fees']:+,.0f}원 |",
-            "",
-            f"## 3. 최적 파라미터 (Best Trial #{best.number})",
-            "",
-            "| 파라미터 | 최적값 | Baseline | 변경 |",
-            "|---|---|---|---|",
-        ]
-        for key, value in sorted(best.params.items()):
-            bl_val = baseline_params.get(key, "N/A")
-            changed = ""
-            if isinstance(bl_val, (int, float)):
-                if isinstance(value, float):
-                    changed = f"{value - bl_val:+.2f}" if value != bl_val else "-"
-                else:
-                    changed = f"{value - bl_val:+d}" if value != bl_val else "-"
-            if isinstance(value, float):
-                bl_str = f"{bl_val:.2f}" if isinstance(bl_val, float) else str(bl_val)
-                lines.append(f"| `{key}` | **{value:.2f}** | {bl_str} | {changed} |")
-            elif isinstance(value, int) and value >= 1_000_000:
-                bl_str = f"{bl_val:,}" if isinstance(bl_val, int) else str(bl_val)
-                lines.append(f"| `{key}` | **{value:,}** | {bl_str} | {changed} |")
-            else:
-                lines.append(f"| `{key}` | **{value}** | {bl_val} | {changed} |")
-
-        # Top 5
-        top5 = sorted(completed, key=lambda t: t.value, reverse=True)[:5]
-        lines += [
-            "",
-            "## 4. Top 5 Trials",
-            "",
-            "| # | Score | MDD | Sharpe | 승률 | 매도 | 손절 | 횡보일 | CB차단 |",
-            "|---|---|---|---|---|---|---|---|---|",
-        ]
-        for t in top5:
-            lines.append(
-                f"| {t.number} | {t.value:+.2f} "
-                f"| -{t.user_attrs.get('mdd', 0):.2f}% "
-                f"| {t.user_attrs.get('sharpe', 0):.4f} "
-                f"| {t.user_attrs.get('win_rate', 0):.1f}% "
-                f"| {t.user_attrs.get('total_sells', 0)} "
-                f"| {t.user_attrs.get('stop_loss_count', 0)} "
-                f"| {t.user_attrs.get('sideways_days', 0)} "
-                f"| {t.user_attrs.get('cb_buy_blocks', 0)} |"
+        if kwargs.get("test_start"):
+            extra_exec_rows.append(
+                ("Test 기간", f"{kwargs['test_start']} ~ {kwargs.get('test_end') or '엔진 기본값'}")
             )
 
-        # Parameter importance
-        if len(completed) >= 5:
-            try:
-                importance = optuna.importance.get_param_importances(study)
-                lines += [
-                    "",
-                    "## 5. 파라미터 중요도 (fANOVA)",
-                    "",
-                    "| 파라미터 | 중요도 |",
-                    "|---|---|",
-                ]
-                for param, score in sorted(importance.items(), key=lambda x: -x[1]):
-                    bar = "█" * int(score * 30)
-                    lines.append(f"| `{param}` | {score:.4f} {bar} |")
-            except Exception:
-                pass
-
-        # Top 5 파라미터 상세
-        lines += ["", "## 6. Top 5 파라미터 상세", ""]
-        for rank, t in enumerate(top5, 1):
-            lines.append(f"### #{rank} — Trial {t.number} (score={t.value:+.2f})")
-            lines.append("")
-            lines.append("```")
-            for key, value in sorted(t.params.items()):
-                if isinstance(value, float):
-                    lines.append(f"{key} = {value:.2f}")
-                elif isinstance(value, int) and value >= 1_000_000:
-                    lines.append(f"{key} = {value:_}")
-                else:
-                    lines.append(f"{key} = {value}")
-            lines.append("```")
-            lines.append("")
-
-        # config.py 적용 코드
-        lines += [f"## 7. config.py 적용 코드 (Best Trial #{best.number})", "", "```python"]
-        for key, value in sorted(best.params.items()):
-            if isinstance(value, int):
-                lines.append(f"{key} = {value:_}" if value >= 1_000_000 else f"{key} = {value}")
-            else:
-                lines.append(f"{key} = {value:.2f}" if abs(value) >= 0.01 else f"{key} = {value}")
-        lines += ["```", ""]
-
+        sections = [
+            rs.section_execution_info(study, elapsed, n_jobs, self.version,
+                                      extra_rows=extra_exec_rows),
+            rs.section_baseline_vs_best(study, baseline,
+                                        extra_rows=[("CB 차단", "cb_buy_blocks", "cb_buy_blocks")]),
+            rs.section_best_params(study, baseline_params),
+            rs.section_top5_table(study,
+                                  extra_columns=[("CB차단", "cb_buy_blocks")]),
+            rs.section_importance(study),
+            rs.section_top5_detail(study),
+            rs.section_config_code(study),
+        ]
         # Train/Test 비교 섹션
+        test_results = kwargs.get("test_results")
         if test_results:
-            lines += [
-                "## 8. Train/Test 성과 비교 (과적합 검증)",
-                "",
-                f"> Train 기간: {self.train_end or '전체'} 이전  |  "
-                f"Test 기간: {test_start or 'N/A'} ~ {test_end or '전체'}",
-                "",
-                "| Rank | Trial# | Train Score | Test 수익률 | Test MDD | Test Sharpe | Test 승률 | 판정 |",
-                "|---|---|---|---|---|---|---|---|",
-            ]
-            for item in test_results:
-                tr = item["test_result"]
-                if tr is None:
-                    lines.append(
-                        f"| {item['rank']} | #{item['trial_number']} "
-                        f"| {item['train_score']:+.2f} | - | - | - | - | 실패 |"
-                    )
-                    continue
-                test_ret = tr["total_return_pct"]
-                test_mdd = tr["mdd"]
-                if test_ret > 10.0 and test_mdd < 12.0:
-                    verdict = "양호"
-                elif test_ret > 0.0:
-                    verdict = "보통"
-                else:
-                    verdict = "과적합"
-                lines.append(
-                    f"| {item['rank']} | #{item['trial_number']} "
-                    f"| {item['train_score']:+.2f} "
-                    f"| {test_ret:+.2f}% "
-                    f"| -{test_mdd:.2f}% "
-                    f"| {tr['sharpe']:.4f} "
-                    f"| {tr['win_rate']:.1f}% "
-                    f"| {verdict} |"
-                )
-            lines.append("")
-
-        return "\n".join(lines)
+            sections.append(rs.section_train_test(
+                test_results,
+                train_end=self.train_end,
+                test_start=kwargs.get("test_start"),
+                test_end=kwargs.get("test_end"),
+            ))
+        return sections
 
 
 # ============================================================
@@ -824,7 +545,10 @@ def _study_worker(
         sampler=sampler,
     )
     opt = V4Optimizer(gap_max=gap_max, objective_mode=objective, phase=phase, train_end=train_end)
-    obj = opt._make_v4_objective()
+    obj_kwargs = {}
+    if train_end:
+        obj_kwargs["end_date"] = train_end
+    obj = opt._make_objective(**obj_kwargs)
     study.optimize(obj, n_trials=n_trials, show_progress_bar=False)
 
 
@@ -930,6 +654,7 @@ def main():
             timeout=args.timeout,
             study_name=args.study_name,
             db=args.db,
+            end_date=args.train_end,
             test_start=args.test_start,
             test_end=args.test_end,
             phase1_db=args.phase1_db,
@@ -947,6 +672,7 @@ def main():
             db=args.db,
             baseline=result.to_dict(),
             baseline_params=params,
+            end_date=args.train_end,
             test_start=args.test_start,
             test_end=args.test_end,
             phase1_db=args.phase1_db,

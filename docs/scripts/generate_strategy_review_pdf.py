@@ -213,6 +213,7 @@ def clean_md(text: str) -> str:
     # 폰트 미지원 특수문자 치환
     text = text.replace("⚠️", "[!]").replace("⚠", "[!]")
     text = text.replace("✅", "[OK]").replace("❌", "[X]")
+    text = text.replace("⬜", "[ ]").replace("🟩", "[G]")
     text = text.replace("−", "-").replace("\ufe0f", "")
     return text.strip()
 

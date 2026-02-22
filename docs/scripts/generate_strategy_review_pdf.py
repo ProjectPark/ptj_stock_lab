@@ -1,7 +1,7 @@
 """
 전략 리뷰 문서 → PDF 변환
 ===========================
-docs/notes/taejun_strategy_review_2026-02-21_VNQ.md → docs/pdf/taejun_strategy_review_2026-02-21_VNQ.pdf
+docs/notes/taejun_strategy_review_2026-02-22_VNQ.md → docs/pdf/taejun_strategy_review_2026-02-22_VNQ.pdf
 """
 from __future__ import annotations
 
@@ -12,9 +12,9 @@ from fpdf import FPDF
 
 # Paths
 ROOT = Path(__file__).resolve().parent.parent.parent
-MD_PATH = ROOT / "docs" / "notes" / "taejun_strategy_review_2026-02-21_VNQ.md"
+MD_PATH = ROOT / "docs" / "notes" / "taejun_strategy_review_2026-02-22_VNQ.md"
 PDF_DIR = ROOT / "docs" / "pdf"
-PDF_PATH = PDF_DIR / "taejun_strategy_review_2026-02-21_VNQ.pdf"
+PDF_PATH = PDF_DIR / "taejun_strategy_review_2026-02-22_VNQ.pdf"
 
 # Font: AppleSDGothicNeo (한글+영문 지원, TTC에서 추출)
 _TTC_PATH = "/System/Library/Fonts/AppleSDGothicNeo.ttc"
@@ -41,7 +41,7 @@ class StrategyPDF(FPDF):
     def header(self):
         self.set_font("SD", size=8)
         self.set_text_color(130, 130, 130)
-        self.cell(0, 6, "taejun_attach_pattern — 전략 리뷰 2026-02-21 (VNQ)", align="R")
+        self.cell(0, 6, "taejun_attach_pattern — 전략 리뷰 2026-02-22 (VNQ)", align="R")
         self.ln(8)
 
     def footer(self):
@@ -111,7 +111,7 @@ class StrategyPDF(FPDF):
         self.set_fill_color(50, 50, 80)
         self.set_text_color(255, 255, 255)
         for i, h in enumerate(headers):
-            self.cell(col_widths[i], row_h, h, border=1, fill=True, align="C")
+            self.cell(col_widths[i], row_h, clean_md(h), border=1, fill=True, align="C")
         self.ln(row_h)
 
         # Rows
@@ -157,7 +157,7 @@ class StrategyPDF(FPDF):
                 # Draw cell border + fill
                 self.rect(x_start + sum(col_widths[:i]), y_start, w, cell_h, style="DF")
                 self.set_xy(x_start + sum(col_widths[:i]) + 1, y_start + 0.5)
-                self.multi_cell(w - 2, row_h, cell_text)
+                self.multi_cell(w - 2, row_h, clean_md(cell_text))
             self.set_xy(x_start, y_start + cell_h)
         self.ln(3)
 
@@ -212,6 +212,7 @@ def clean_md(text: str) -> str:
     text = re.sub(r"\[(.*?)\]\(.*?\)", r"\1", text)  # links
     # 폰트 미지원 특수문자 치환
     text = text.replace("⚠️", "[!]").replace("⚠", "[!]")
+    text = text.replace("✅", "[OK]").replace("❌", "[X]")
     text = text.replace("−", "-").replace("\ufe0f", "")
     return text.strip()
 

@@ -9,13 +9,20 @@ taejun_attach_pattern - 포트폴리오 매니저
 3. 동시 BUY 시그널 충돌시 우선순위 해소
 4. 포지션 추적 (진입가, 수량, 전략명)
 5. 수수료 반영된 체결 시뮬레이션
+
+v5 포트폴리오 제약 (추가):
+- 동시 보유 한도: 최대 $12,000 (총자본 80%), 최소 현금 $3,000 (20%)
+- CONL 단일 전략 보유 원칙: 전략 간 CONL 포지션 중복 금지
+- 일일 1회 거래 제한: 종목별 하루 1회 매수
+- 예외: vix_gold (VIX 방어), crash_buy (급락 역매수)는 한도 초과 허용
 """
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 
+from .asset_mode import AssetModeManager
 from .base import Action, ExitReason, MarketData, Position, Signal
 from .fees import FeeCalculator, FeeConfig
 
@@ -56,6 +63,9 @@ class StrategyAllocation:
 
 # 기본 전략 우선순위
 DEFAULT_ALLOCATIONS: dict[str, StrategyAllocation] = {
+    # 이머전시 (최최우선)
+    "emergency_mode":   StrategyAllocation(max_pct=1.0, priority=0),
+
     # 매크로 전략 (최우선)
     "short_macro":      StrategyAllocation(max_pct=1.0, priority=1),
     "reit_risk":        StrategyAllocation(max_pct=1.0, priority=1),
@@ -97,16 +107,30 @@ class PortfolioManager:
         total_capital_usd: float = 15_000,
         fee_config: FeeConfig | None = None,
         allocations: dict[str, StrategyAllocation] | None = None,
+        mode_manager: AssetModeManager | None = None,
     ):
         self.total_capital = total_capital_usd
         self.cash = total_capital_usd
         self.fee_calc = FeeCalculator(fee_config)
         self.allocations = allocations or DEFAULT_ALLOCATIONS
+        self.mode_manager = mode_manager
 
         # 상태
         self.positions: dict[str, Position] = {}  # ticker -> Position
         self.trades: list[Trade] = []
         self.total_fees: float = 0.0
+
+        # CI-0-2: 매수 주문 시 현금 예약 (pending 상태에서 over-invest 방지)
+        # 출처: MT_VNQ2.md L2852~2862
+        self.reserved_cash: float = 0.0
+
+        # v5 포트폴리오 제약
+        self._max_simultaneous_hold_usd: float = 12_000.0     # 동시 보유 한도 (80%)
+        self._min_cash_reserve_usd: float = 3_000.0           # 최소 현금 유지 (20%)
+        self._simultaneous_cap_exempt: frozenset[str] = frozenset({"vix_gold", "crash_buy"})
+        self._daily_bought: set[str] = set()                   # 일일 매수 기록
+        self._daily_date: datetime.date | None = None          # 기록 기준 날짜
+        self._last_buy_time: dict[str, datetime] = {}          # ticker -> 마지막 매수 시각
 
     # ------------------------------------------------------------------
     # 잔고 조회
@@ -118,6 +142,18 @@ class PortfolioManager:
         return self.cash + sum(
             p.avg_price * p.qty for p in self.positions.values()
         )
+
+    def free_cash(self) -> float:
+        """CI-0-2: 예약금 제외 사용 가능 현금."""
+        return self.cash - self.reserved_cash
+
+    def reserve(self, amount: float) -> None:
+        """CI-0-3: 매수 주문 pending 시 현금 예약 (over-invest 방지)."""
+        self.reserved_cash += amount
+
+    def unreserve(self, amount: float) -> None:
+        """CI-0-3: 주문 취소/만료 시 예약 해제."""
+        self.reserved_cash = max(0.0, self.reserved_cash - amount)
 
     def update_equity(self, prices: dict[str, float]) -> float:
         """현재 시가로 총 자산을 재계산한다."""
@@ -150,7 +186,8 @@ class PortfolioManager:
         return self.allocations.get(strategy_name, StrategyAllocation())
 
     def check_buy_allowed(self, signal: Signal, strategy_name: str,
-                          prices: dict[str, float]) -> tuple[bool, str]:
+                          prices: dict[str, float],
+                          market_time: datetime | None = None) -> tuple[bool, str]:
         """매수 가능 여부를 확인한다.
 
         Returns (allowed, reason).
@@ -179,8 +216,94 @@ class PortfolioManager:
         else:
             remaining = remaining_by_pct
 
+        # 조심모드: 공격전략 remaining × leverage_multiplier
+        if self.mode_manager:
+            multiplier = self.mode_manager.get_leverage_multiplier(strategy_name)
+            if multiplier < 1.0:
+                remaining = remaining * multiplier
+
         if remaining <= 0:
             return False, "allocation limit reached"
+
+        # ── v5 추가 제약 ─────────────────────────────────────────────
+
+        # (1) 일일 1회 매수 제한
+        if signal.ticker in self._daily_bought:
+            return False, f"daily buy limit: {signal.ticker} already bought today"
+
+        # (2) 동시 보유 한도 $12,000 / 최소 현금 $3,000 (vix_gold·crash_buy 제외)
+        if strategy_name not in self._simultaneous_cap_exempt:
+            pos_value = sum(
+                prices.get(p.ticker, p.avg_price) * p.qty
+                for p in self.positions.values()
+            )
+            if pos_value >= self._max_simultaneous_hold_usd:
+                return False, (
+                    f"simultaneous hold cap: ${pos_value:.0f} >= "
+                    f"${self._max_simultaneous_hold_usd:.0f}"
+                )
+            if self.cash <= self._min_cash_reserve_usd:
+                return False, f"min cash reserve: ${self.cash:.0f} <= ${self._min_cash_reserve_usd:.0f}"
+
+        # (3) CONL 단일 전략 보유 원칙
+        if signal.ticker == "CONL":
+            existing_conl = self.positions.get("CONL")
+            if existing_conl and existing_conl.strategy_name != strategy_name:
+                return False, (
+                    f"CONL single-strategy: already held by {existing_conl.strategy_name}"
+                )
+
+        # (4) 종목당 최대 투입 한도
+        _max_per_stock = {"CONL": 6_750.0}
+        _default_max = 5_250.0
+        ticker_max = _max_per_stock.get(signal.ticker, _default_max)
+        ticker_exposure = sum(
+            prices.get(p.ticker, p.avg_price) * p.qty
+            for p in self.positions.values()
+            if p.ticker == signal.ticker
+        )
+        if ticker_exposure >= ticker_max:
+            return False, f"per-stock limit: {signal.ticker} ${ticker_exposure:.0f} >= ${ticker_max:.0f}"
+
+        # (5) 물타기 횟수 제한
+        existing_pos = self.positions.get(signal.ticker)
+        if existing_pos and existing_pos.strategy_name == strategy_name:
+            conl_max_stage = 1  # CONL: 1회 진입만 (물타기 금지)
+            default_max_stage = 5  # 일반: 초기+4회 물타기
+            max_stage = conl_max_stage if signal.ticker == "CONL" else default_max_stage
+            if existing_pos.stage >= max_stage:
+                return False, f"DCA limit: {signal.ticker} stage {existing_pos.stage} >= {max_stage}"
+
+        # (6) 중복 주문 20분 간격
+        if market_time is not None:
+            last_buy = self._last_buy_time.get(signal.ticker)
+            if last_buy is not None:
+                if market_time - last_buy < timedelta(minutes=20):
+                    return False, (
+                        f"duplicate order: {signal.ticker} last bought at {last_buy}, "
+                        f"only {(market_time - last_buy).total_seconds() / 60:.1f}min ago"
+                    )
+
+        # (7) 자금 우선순위
+        _PRIORITY_ORDER = {
+            "vix_gold": 1, "crash_buy": 2, "conditional_conl": 3,
+            "soxl_independent": 4, "twin_pair": 5, "bargain_buy": 5,
+        }
+        my_priority = _PRIORITY_ORDER.get(strategy_name, 99)
+        for pos in self.positions.values():
+            pos_priority = _PRIORITY_ORDER.get(pos.strategy_name, 99)
+            if pos_priority < my_priority:
+                return False, (
+                    f"fund priority: {pos.strategy_name}(pri={pos_priority}) active, "
+                    f"{strategy_name}(pri={my_priority}) blocked"
+                )
+
+        # (8) 진입 시간 필터 (ET 08:00~10:00)
+        if market_time is not None:
+            et_hour = market_time.hour  # market_time은 ET 기준으로 가정
+            if et_hour < 8 or et_hour >= 10:
+                if strategy_name not in self._simultaneous_cap_exempt:
+                    return False, f"entry time filter: ET {et_hour}:00 outside 08:00-10:00"
 
         return True, ""
 
@@ -210,17 +333,21 @@ class PortfolioManager:
         3. 자금이 부족하면 낮은 우선순위 시그널 제거
         """
         sells = []
+        emergency_sells = []
         buys = []
 
         for name, sig in signals:
             if sig.action == Action.SELL:
-                sells.append((name, sig))
+                if sig.metadata.get("emergency_mode"):
+                    emergency_sells.append((name, sig))
+                else:
+                    sells.append((name, sig))
             elif sig.action == Action.BUY:
                 buys.append((name, sig))
             # HOLD, SKIP은 무시
 
-        # SELL 먼저 (자금 확보)
-        result = list(sells)
+        # 이머전시 SELL → 최우선, 그 다음 일반 SELL (자금 확보)
+        result = emergency_sells + sells
 
         # BUY는 우선순위 순 정렬
         buys.sort(key=lambda x: self._get_allocation(x[0]).priority)
@@ -282,7 +409,12 @@ class PortfolioManager:
             max_usd = signal.metadata["max_amount_krw"] / 1350
             desired = min(desired, max_usd)
 
-        amount = min(desired, remaining, self.cash)
+        # v5: 최소 현금 유지 — 매수 금액 클램프
+        if strategy_name not in self._simultaneous_cap_exempt:
+            max_spend = max(0.0, self.cash - self._min_cash_reserve_usd)
+            amount = min(desired, remaining, self.cash, max_spend)
+        else:
+            amount = min(desired, remaining, self.cash)
         if amount <= 0:
             return None
 
@@ -313,6 +445,16 @@ class PortfolioManager:
         # 현금 차감
         self.cash -= amount
         self.total_fees += fee_result.fee
+
+        # v5: 일일 매수 기록
+        current_date = timestamp.date()
+        if self._daily_date != current_date:
+            self._daily_bought.clear()
+            self._daily_date = current_date
+        self._daily_bought.add(ticker)
+
+        # 마지막 매수 시각 기록 (중복 주문 20분 간격 체크용)
+        self._last_buy_time[ticker] = timestamp
 
         trade = Trade(
             timestamp=timestamp, ticker=ticker, side="BUY",
@@ -429,6 +571,10 @@ class PortfolioManager:
         else:
             equity = self.equity
 
+        pos_value = sum(
+            (prices.get(p.ticker, p.avg_price) if prices else p.avg_price) * p.qty
+            for p in self.positions.values()
+        )
         return {
             "total_capital": self.total_capital,
             "cash": round(self.cash, 2),
@@ -448,6 +594,10 @@ class PortfolioManager:
             "total_fees": round(self.total_fees, 2),
             "win_trades": sum(1 for t in self.trades if t.side == "SELL" and t.pnl > 0),
             "lose_trades": sum(1 for t in self.trades if t.side == "SELL" and t.pnl <= 0),
+            # v5 포트폴리오 제약 상태
+            "v5_simultaneous_hold_usd": round(pos_value, 2),
+            "v5_simultaneous_cap_usd": self._max_simultaneous_hold_usd,
+            "v5_daily_bought": sorted(self._daily_bought),
         }
 
     def trade_log(self) -> list[dict]:

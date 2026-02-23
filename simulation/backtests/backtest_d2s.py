@@ -95,7 +95,7 @@ class D2SBacktest:
 
     def _load_data(self) -> tuple[pd.DataFrame, dict[str, pd.DataFrame], dict]:
         """market_daily + Polymarket 데이터를 로드한다."""
-        data_dir = _ROOT / "data"
+        data_dir = _PROJECT_ROOT / "data"
         market_path = data_dir / "market" / "daily" / "market_daily.parquet"
         poly_dir = data_dir / "polymarket"
 
@@ -456,7 +456,7 @@ class D2SBacktest:
     def save_trades(self, path: Path | None = None) -> Path:
         """거래 기록을 CSV로 저장한다."""
         if path is None:
-            path = _ROOT / "data" / "results" / "backtests" / "d2s_trades.csv"
+            path = _PROJECT_ROOT / "data" / "results" / "backtests" / "d2s_trades.csv"
         path.parent.mkdir(parents=True, exist_ok=True)
 
         records = []

@@ -124,6 +124,9 @@ class PortfolioManager:
         # 출처: MT_VNQ2.md L2852~2862
         self.reserved_cash: float = 0.0
 
+        # MT_VNQ3 §5: 부분체결 누적 기록
+        self.fills_ledger: list[dict] = []
+
         # v5 포트폴리오 제약
         self._max_simultaneous_hold_usd: float = 12_000.0     # 동시 보유 한도 (80%)
         self._min_cash_reserve_usd: float = 3_000.0           # 최소 현금 유지 (20%)
@@ -154,6 +157,42 @@ class PortfolioManager:
     def unreserve(self, amount: float) -> None:
         """CI-0-3: 주문 취소/만료 시 예약 해제."""
         self.reserved_cash = max(0.0, self.reserved_cash - amount)
+
+    # ------------------------------------------------------------------
+    # MT_VNQ3 §5: 부분체결 / 포지션 확정
+    # ------------------------------------------------------------------
+
+    def partial_fill(self, ticker: str, qty_delta: float, price: float,
+                     ts: datetime | None = None) -> None:
+        """MT_VNQ3 §5: 부분체결 즉시 반영.
+
+        fills_ledger에 기록하고, position.qty를 qty_delta만큼 반영하며,
+        reserved_cash를 체결된 만큼 즉시 해제한다.
+        """
+        self.fills_ledger.append({
+            "ticker": ticker,
+            "qty_delta": qty_delta,
+            "price": price,
+            "ts": ts or datetime.now(),
+        })
+
+        position = self.positions.get(ticker)
+        if position is not None:
+            # 평균가 재계산 (기존 cost + 신규 cost) / (기존 qty + 신규 qty)
+            total_cost = position.avg_price * position.qty + price * qty_delta
+            position.qty += qty_delta
+            if position.qty > 0:
+                position.avg_price = total_cost / position.qty
+
+        # 체결된 만큼 예약금 해제
+        filled_amount = qty_delta * price
+        self.unreserve(filled_amount)
+
+    def confirm_position(self, ticker: str) -> None:
+        """MT_VNQ3 §5: Fill Window 종료 후 포지션 확정."""
+        position = self.positions.get(ticker)
+        if position is not None:
+            position.confirmed = True
 
     def update_equity(self, prices: dict[str, float]) -> float:
         """현재 시가로 총 자산을 재계산한다."""

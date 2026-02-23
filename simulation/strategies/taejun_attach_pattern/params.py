@@ -718,9 +718,16 @@ SWING_MODE = {
 # ──────────────────────────────────────────────────────────
 ENGINE_CONFIG = {
     # CI-0-3: 주문 상태머신
-    "order_expiry_bars": 5,        # 미체결 만료 기본값 (5 bars = 5분)
+    # order_expiry_bars: deprecated — order_ttl_sec으로 대체 (MT_VNQ3 §3-3)
+    "order_ttl_sec": 120,          # MT_VNQ3 §3-3: 주문 TTL 2분 확정
     "order_retry_max": 3,          # 재시도 최대 횟수
     "order_slip_pct": 0.001,       # 재시도 시 가격 보정 (0.1%)
+
+    # MT_VNQ3 신규 파라미터
+    "fill_window_sec": 10,         # MT_VNQ3 §5: Fill Window 10초 룰
+    "bid_slip_max_pct": 0.002,     # MT_VNQ3 §7: 매도 즉시성 bid 기반 0.2% 이내
+    "shrink_hard_limit": 1.001,    # MT_VNQ3 §1: 100.1% 이상이면 BUY_STOP
+    "position_mode": "effective_confirmed",  # MT_VNQ3: 포지션 분리 모드 (effective/confirmed)
 
     # CI-0-4: "즉시 행동" 정의
     "signal_bar_close": True,      # True = 신호 Bar 종가 기준 지정가

@@ -13,7 +13,10 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    import pandas as pd
 
 
 # ---------------------------------------------------------------------------
@@ -61,6 +64,17 @@ class MarketData:
         종목별 거래량.
     crypto : dict[str, float] | None
         크립토 스팟 가격 변동률 (%). {"BTC": 0.9, "ETH": 0.9, "SOL": 2.0, "XRP": 5.0}
+    poly_timestamps : dict[str, datetime] | None
+        각 Polymarket 값의 마지막 갱신 시각. 품질 필터에 사용.
+    poly_prev : dict[str, float] | None
+        이전 시점의 Polymarket 확률. 이머전시 모드 변동 감지에 사용.
+    ohlcv : dict[str, pd.DataFrame] | None
+        종목별 OHLCV 히스토리 (pd.DataFrame, columns: open/high/low/close/volume).
+        SidewaysDetector v5 기술지표 계산, CONL ADX/EMA, SOXL 독립 매매 등에 사용.
+        예: {"SPY": df, "QQQ": df, "CONL": df}
+    luld_counts : dict[str, int] | None
+        종목별 LULD(Limit Up-Limit Down) 거래중단 발생 횟수.
+        급락 역매수(5-5절) 트리거 조건에 사용. 예: {"SOXL": 3, "CONL": 0}
     """
     changes: dict[str, float]
     prices: dict[str, float]
@@ -69,6 +83,10 @@ class MarketData:
     history: dict[str, dict] | None = None
     volumes: dict[str, float] | None = None
     crypto: dict[str, float] | None = None
+    poly_timestamps: dict[str, datetime] | None = None
+    poly_prev: dict[str, float] | None = None
+    ohlcv: "dict[str, pd.DataFrame] | None" = None
+    luld_counts: dict[str, int] | None = None
 
     @classmethod
     def from_backtest_bar(
@@ -151,6 +169,9 @@ class Position:
         진입 전략 이름.
     stage : int
         매수 단계 (1=초기, 2=추가매수, ...).
+    confirmed : bool
+        MT_VNQ3 §5: FILLED 또는 Fill Window 종료로 확정된 상태.
+        False이면 아직 pending/partial 상태.
     """
     ticker: str
     avg_price: float
@@ -158,6 +179,7 @@ class Position:
     entry_time: datetime
     strategy_name: str
     stage: int = 1
+    confirmed: bool = False
 
 
 # ---------------------------------------------------------------------------
@@ -196,6 +218,32 @@ class BaseStrategy(ABC):
         - 포지션 있음 → 청산 검토 (SELL or HOLD)
         """
         ...
+
+    def generate_signals(self, market: MarketData,
+                         positions: dict[str, "Position"] | None = None,
+                         ) -> list[Signal]:
+        """복수 시그널 생성 (IAU+GDXU 동시 매수 등 다종목 전략용).
+
+        기본 구현은 generate_signal()을 래핑하여 단일 시그널 반환.
+        복수 종목을 다루는 전략에서 오버라이드.
+
+        Parameters
+        ----------
+        market : MarketData
+        positions : dict[str, Position] | None
+            보유 포지션 dict. 키는 ticker.
+        """
+        pos = None
+        if positions:
+            # 첫 번째 관련 포지션을 가져온다 (단일 포지션 전략 호환)
+            for p in positions.values():
+                if p.strategy_name == self.name:
+                    pos = p
+                    break
+        sig = self.generate_signal(market, pos)
+        if sig.action in (Action.BUY, Action.SELL):
+            return [sig]
+        return []
 
     def validate_params(self) -> list[str]:
         """파라미터 유효성 검증. 에러 메시지 리스트를 반환한다.

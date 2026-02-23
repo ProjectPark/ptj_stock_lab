@@ -215,6 +215,41 @@ class CompositeSignalEngine:
         return buckets  # len=4
 
     # ------------------------------------------------------------------
+    # MT_VNQ3 §1: 비중 합계 초과 시 축소 (shrink)
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _shrink_allocations(
+        allocations: list[float],
+        hard_limit: float = 1.001,
+    ) -> list[float] | str:
+        """MT_VNQ3 §1: 비중 합계가 100% 초과시 비례 shrink.
+
+        Parameters
+        ----------
+        allocations : list[float]
+            전략별 비중 리스트 (0.0~1.0 스케일).
+        hard_limit : float
+            ENGINE_CONFIG["shrink_hard_limit"]. 합계가 이 값 이상이면 BUY_STOP.
+
+        Returns
+        -------
+        list[float] | str
+            축소된 비중 리스트. 합계가 hard_limit 이상이면 "BUY_STOP" 문자열 반환.
+        """
+        total = sum(allocations)
+        if total <= 1.0:
+            return allocations
+
+        # hard_limit 초과 → BUY_STOP
+        if total >= hard_limit:
+            return "BUY_STOP"
+
+        # 비례 shrink: 하위 항목부터 drop
+        factor = 1.0 / total
+        return [a * factor for a in allocations]
+
+    # ------------------------------------------------------------------
 
     def generate_all_signals(
         self,
@@ -273,6 +308,10 @@ class CompositeSignalEngine:
 
         # CI-0-5: M200 즉시매도 최우선 — 다른 신호보다 먼저 평가
         # TODO: M200 조건 달성 시 신규 BUY 전면 금지 + 보유 포지션 매도
+
+        # TODO: M201 게이트 — m201_mode.M201ImmediateMode.check(p, p_prev)
+        # 우선순위: M200 다음, 리스크모드 이전
+        # BTC 확률 급변 시 즉시 전환 파이프라인 실행
 
         # ── Step 0b: Circuit Breaker 평가 ────────────────────────────
         cb_status_dict: dict = {}

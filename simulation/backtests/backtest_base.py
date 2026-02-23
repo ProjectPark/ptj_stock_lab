@@ -218,10 +218,23 @@ class BacktestBase(ABC):
                        getattr(pos, 'total_invested_usd', 0.0))
 
     def _load_data(self) -> tuple[pd.DataFrame, dict]:
-        """공통 데이터를 로드한다."""
+        """공통 데이터를 로드한다.
+
+        start_date 가 2025-01-01 이전이면 3y 파일(2023~)을 사용하고,
+        그 이후이면 기본 파일(2025~)을 사용한다.
+        """
         import config
         print("[1/4] 데이터 준비")
-        df = backtest_common.load_parquet(config.OHLCV_DIR / "backtest_1min_v2.parquet")
+        if self.start_date < date(2025, 1, 1):
+            parquet_path = config.OHLCV_1MIN_3Y
+        else:
+            parquet_path = config.OHLCV_1MIN_DEFAULT
+        print(f"  OHLCV: {parquet_path.name}")
+        df = backtest_common.load_parquet(parquet_path)
+        # date 컬럼을 datetime.date 객체로 정규화 (3y 파일은 문자열로 저장됨)
+        if "date" in df.columns and len(df) > 0 and isinstance(df["date"].iloc[0], str):
+            import pandas as _pd
+            df["date"] = _pd.to_datetime(df["date"]).dt.date
         poly = backtest_common.load_polymarket_daily(config.POLY_DATA_DIR)
         return df, poly
 

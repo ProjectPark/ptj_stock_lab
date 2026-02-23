@@ -41,3 +41,7 @@ credentials.*
 # Generated
 docs/**/*.pdf
 docs/charts/
+# history 루트 CSV (실거래 데이터)
+history/거래내역_*.csv
+history/손해_*.csv
+history/수익_*.csv

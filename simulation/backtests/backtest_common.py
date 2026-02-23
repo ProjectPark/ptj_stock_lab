@@ -195,6 +195,12 @@ def load_polymarket_daily(history_dir: str | Path) -> dict[date, dict]:
         eth_up = _extract_yes_no_prob(indicators.get("eth_above_today"), "Yes")
         rate_hike = _extract_yes_no_prob(indicators.get("fed_decision"), "Yes")
 
+        # todd_fuck_v1: 확장 필드
+        btc_upside_pressure = _extract_upside_pressure(indicators.get("btc_above_today"))
+        btc_weekly_reach, btc_weekly_dip = _extract_reach_dip(indicators.get("btc_weekly"))
+        btc_monthly_reach, btc_monthly_dip = _extract_reach_dip(indicators.get("btc_monthly"))
+        fed_score = _extract_fed_score(indicators.get("fed_decision"))
+
         # 같은 날짜에 여러 파일(fidelity 다름)이 있을 수 있으므로,
         # 더 세밀한 데이터(time series 있는 쪽)를 우선 사용
         if dt in result:
@@ -208,8 +214,29 @@ def load_polymarket_daily(history_dir: str | Path) -> dict[date, dict]:
                 existing["eth_up"] = eth_up
             if existing.get("rate_hike", 0.5) == 0.5 and rate_hike != 0.5:
                 existing["rate_hike"] = rate_hike
+            if existing.get("btc_upside_pressure", 0.5) == 0.5 and btc_upside_pressure != 0.5:
+                existing["btc_upside_pressure"] = btc_upside_pressure
+            if existing.get("btc_weekly_reach", 0.0) == 0.0 and btc_weekly_reach != 0.0:
+                existing["btc_weekly_reach"] = btc_weekly_reach
+            if existing.get("btc_weekly_dip", 0.0) == 0.0 and btc_weekly_dip != 0.0:
+                existing["btc_weekly_dip"] = btc_weekly_dip
+            if existing.get("btc_monthly_reach", 0.0) == 0.0 and btc_monthly_reach != 0.0:
+                existing["btc_monthly_reach"] = btc_monthly_reach
+            if existing.get("btc_monthly_dip", 0.0) == 0.0 and btc_monthly_dip != 0.0:
+                existing["btc_monthly_dip"] = btc_monthly_dip
+            if existing.get("fed_score", 0.0) == 0.0 and fed_score != 0.0:
+                existing["fed_score"] = fed_score
         else:
-            result[dt] = {"btc_up": btc_up, "ndx_up": ndx_up, "eth_up": eth_up, "rate_hike": rate_hike}
+            result[dt] = {
+                "btc_up": btc_up, "ndx_up": ndx_up, "eth_up": eth_up, "rate_hike": rate_hike,
+                # todd_fuck_v1 확장 필드
+                "btc_upside_pressure": btc_upside_pressure,
+                "btc_weekly_reach": btc_weekly_reach,
+                "btc_weekly_dip": btc_weekly_dip,
+                "btc_monthly_reach": btc_monthly_reach,
+                "btc_monthly_dip": btc_monthly_dip,
+                "fed_score": fed_score,
+            }
 
     if result:
         min_date = min(result.keys())
@@ -264,6 +291,101 @@ def _extract_up_down_prob(indicator: dict | None, outcome_key: str) -> float:
             pass
 
     return 0.5
+
+
+def _get_last_prob(series: list) -> float | None:
+    """time series ([{t, p}, ...]) 또는 [[t, p], ...] 에서 마지막 확률 추출."""
+    if not series:
+        return None
+    last = series[-1]
+    if isinstance(last, dict):
+        return float(last.get("p", 0.5))
+    if isinstance(last, (list, tuple)) and len(last) >= 2:
+        return float(last[1])
+    return None
+
+
+def _extract_upside_pressure(indicator: dict | None) -> float:
+    """btc_above_today: 상방 압력 지수 (0~1).
+
+    각 가격 레벨의 'Yes' 확률 평균. 높을수록 상승 기대, 낮을수록 하락 기대.
+    데이터 없으면 0.5 (중립).
+    """
+    if indicator is None or "error" in indicator:
+        return 0.5
+
+    markets = indicator.get("markets", [])
+    if not markets:
+        return 0.5
+
+    probs = []
+    for m in markets:
+        outcomes = m.get("outcomes", {})
+        yes_series = outcomes.get("Yes", [])
+        p = _get_last_prob(yes_series)
+        if p is not None:
+            probs.append(p)
+
+    return sum(probs) / len(probs) if probs else 0.5
+
+
+def _extract_reach_dip(indicator: dict | None) -> tuple[float, float]:
+    """btc_weekly / btc_monthly: (max_reach_prob, max_dip_prob).
+
+    'reach' 포함 질문 → 상방 도달 최대 확률.
+    'dip' 포함 질문 → 하방 도달 최대 확률.
+    데이터 없으면 (0.0, 0.0).
+    """
+    if indicator is None or "error" in indicator:
+        return 0.0, 0.0
+
+    markets = indicator.get("markets", [])
+    reach_probs: list[float] = []
+    dip_probs: list[float] = []
+
+    for m in markets:
+        question = m.get("question", "").lower()
+        outcomes = m.get("outcomes", {})
+        yes_series = outcomes.get("Yes", [])
+        p = _get_last_prob(yes_series)
+        if p is None:
+            continue
+        if "reach" in question:
+            reach_probs.append(p)
+        elif "dip" in question:
+            dip_probs.append(p)
+
+    max_reach = max(reach_probs) if reach_probs else 0.0
+    max_dip = max(dip_probs) if dip_probs else 0.0
+    return max_reach, max_dip
+
+
+def _extract_fed_score(indicator: dict | None) -> float:
+    """fed_decision: 가중 점수 (cut_25×2.0 + cut_50×3.0 − hike×2.0).
+
+    양수 = 완화적, 음수 = 긴축적. 데이터 없으면 0.0.
+    """
+    if indicator is None or "error" in indicator:
+        return 0.0
+
+    markets = indicator.get("markets", [])
+    cut_25 = cut_50 = hike = 0.0
+
+    for m in markets:
+        question = m.get("question", "").lower()
+        outcomes = m.get("outcomes", {})
+        yes_series = outcomes.get("Yes", [])
+        p = _get_last_prob(yes_series)
+        if p is None:
+            continue
+        if "50" in question and ("decrease" in question or "cut" in question):
+            cut_50 = p
+        elif "25" in question and ("decrease" in question or "cut" in question):
+            cut_25 = p
+        elif "increase" in question or "hike" in question:
+            hike = p
+
+    return cut_25 * 2.0 + cut_50 * 3.0 - hike * 2.0
 
 
 def _extract_yes_no_prob(indicator: dict | None, outcome_key: str) -> float:

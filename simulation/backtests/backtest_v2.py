@@ -112,7 +112,7 @@ class BacktestEngineV2(BacktestBase):
 
         # OOP signal engine: 기본값으로 CompositeSignalEngine 사용
         if signal_engine is None:
-            from simulation.strategies.taejun_attach_pattern.composite_signal_engine import CompositeSignalEngine
+            from simulation.strategies.line_b_taejun.composite_signal_engine import CompositeSignalEngine
             signal_engine = CompositeSignalEngine.from_base_params(params)
 
         super().__init__(

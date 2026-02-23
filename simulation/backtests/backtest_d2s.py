@@ -26,13 +26,13 @@ import pandas as pd
 
 from simulation.backtests import backtest_common
 
-from simulation.strategies.taejun_attach_pattern.d2s_engine import (
+from simulation.strategies.line_c_d2s.d2s_engine import (
     D2SEngine,
     D2SPosition,
     DailySnapshot,
     TechnicalPreprocessor,
 )
-from simulation.strategies.taejun_attach_pattern.params import D2S_ENGINE
+from simulation.strategies.line_c_d2s.params_d2s import D2S_ENGINE
 
 # ============================================================
 # 수수료 상수

@@ -27,8 +27,8 @@ if str(_PROJECT_ROOT) not in sys.path:
 
 import numpy as np
 
-from simulation.strategies.taejun_attach_pattern.params import D2S_ENGINE_V2
-from simulation.strategies.taejun_attach_pattern.d2s_engine import D2SPosition, DailySnapshot
+from simulation.strategies.line_c_d2s.params_d2s import D2S_ENGINE_V2
+from simulation.strategies.line_c_d2s.d2s_engine import D2SPosition, DailySnapshot
 
 from simulation.backtests.backtest_d2s import D2SBacktest, TradeRecord, BUY_FEE_PCT, SELL_FEE_PCT
 

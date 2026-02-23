@@ -114,6 +114,11 @@ class BaseParams:
     # ── 수수료 ─────────────────────────────────────────────────
     fee_config: FeeConfig = FeeConfig()
 
+    # ── 자금 유입 ────────────────────────────────────────────
+    injection_pct: float = 0.0          # 투입원금 대비 입금 비율 (%, 0=비활성)
+    injection_interval_days: int = 0    # 입금 간격 (거래일, 0=비활성, 20≈월간)
+    size_by_invested: bool = False      # True: 포지션 사이즈를 투입원금 기반으로
+
     # ── 직렬화 ─────────────────────────────────────────────────
 
     def to_dict(self) -> dict[str, Any]:
@@ -321,6 +326,10 @@ def _shared_params_from_config() -> dict[str, Any]:
         "brku_weight_pct": config.BRKU_WEIGHT_PCT,
         "bearish_polymarket_threshold": config.BEARISH_POLYMARKET_THRESHOLD,
         "coin_follow_volatility_gap": config.COIN_FOLLOW_VOLATILITY_GAP,
+        # 자금 유입
+        "injection_pct": config.INJECTION_PCT,
+        "injection_interval_days": config.INJECTION_INTERVAL_DAYS,
+        "size_by_invested": config.SIZE_BY_INVESTED,
     }
 
 

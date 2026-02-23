@@ -392,6 +392,19 @@ class BacktestEngineV5(BacktestBase):
             self.sideways_days += 1
 
     # ----------------------------------------------------------
+    # Capital injection hook
+    # ----------------------------------------------------------
+    def _apply_injection(self, amount: float) -> None:
+        self.cash_krw += amount
+
+    @property
+    def _size_scale(self) -> float:
+        """투입원금 성장에 따른 매수금액 배수."""
+        if not self.params.size_by_invested:
+            return 1.0
+        return self.invested_capital / self.initial_capital
+
+    # ----------------------------------------------------------
     # Equity override for USD (no FX)
     # ----------------------------------------------------------
     def _snapshot_equity(self, cur_prices: dict[str, float]) -> float:
@@ -786,6 +799,7 @@ class BacktestEngineV5(BacktestBase):
         pnl_pct = (pnl_krw / cost_krw * 100) if cost_krw > 0 else 0.0
 
         self.cash_krw += net_proceeds_krw
+        self.trading_pnl += pnl_krw
         pos.total_qty -= sell_qty
         pos.total_invested_krw -= cost_krw
 
@@ -1173,7 +1187,7 @@ class BacktestEngineV5(BacktestBase):
                     continue
                 self._buy(
                     follow, price, ts, "twin",
-                    amount_krw=config.V5_INITIAL_BUY,
+                    amount_krw=config.V5_INITIAL_BUY * self._size_scale,
                 )
 
         # DCA (v5: max 4회, max 700만, 쿨타임 20분)
@@ -1194,14 +1208,14 @@ class BacktestEngineV5(BacktestBase):
                 continue
             if pos.dca_count >= config.V5_DCA_MAX_COUNT:
                 continue
-            if pos.total_invested_krw + config.V5_DCA_BUY > config.V5_MAX_PER_STOCK:
+            if pos.total_invested_krw + config.V5_DCA_BUY * self._size_scale > config.V5_MAX_PER_STOCK * self._size_scale:
                 continue
             required_drop_pct = config.DCA_DROP_PCT * (pos.dca_count + 1)
             actual_drop_pct = (price - pos.initial_entry_price) / pos.initial_entry_price * 100
             if actual_drop_pct <= required_drop_pct:
                 self._buy(
                     ticker, price, ts, pos.signal_type,
-                    amount_krw=config.V5_DCA_BUY,
+                    amount_krw=config.V5_DCA_BUY * self._size_scale,
                     is_conl_conditional=pos.is_conl_conditional,
                     is_coin_conditional=pos.is_coin_conditional,
                 )
@@ -1214,7 +1228,7 @@ class BacktestEngineV5(BacktestBase):
                 if price is not None:
                     self._buy(
                         "CONL", price, ts, "conditional_conl",
-                        amount_krw=config.V5_INITIAL_BUY,
+                        amount_krw=config.V5_INITIAL_BUY * self._size_scale,
                         is_conl_conditional=True,
                     )
 
@@ -1227,7 +1241,7 @@ class BacktestEngineV5(BacktestBase):
                 if price is not None:
                     self._buy(
                         target, price, ts, "conditional_coin",
-                        amount_krw=config.V5_INITIAL_BUY,
+                        amount_krw=config.V5_INITIAL_BUY * self._size_scale,
                         is_coin_conditional=True,
                     )
 
@@ -1323,6 +1337,9 @@ class BacktestEngineV5(BacktestBase):
         print(f"  최종 자산    : ${final:>13,.2f}")
         print("  통화 단위    : USD (환율 변환 미사용)")
         print(f"  총 수익률    : {total_ret:>+.2f}%")
+        if self.injection_log:
+            invested_ret = (final - self.invested_capital) / self.invested_capital * 100 if self.invested_capital > 0 else 0
+            print(f"  투입원금 수익률: {invested_ret:>+.2f}%")
         print(f"  총 손익      : ${total_pnl:>+13,.2f}")
         print(f"  최대 낙폭    : -{mdd:.2f}%")
         print(f"  Sharpe Ratio : {sharpe:.4f}")
@@ -1355,6 +1372,20 @@ class BacktestEngineV5(BacktestBase):
         print(f"    매도 수수료 : ${self.total_sell_fees_krw:>11,.2f}")
         print(f"    총 수수료   : ${total_fees:>11,.2f}")
         print("-" * 70)
+
+        # Capital injection
+        if self.injection_log:
+            total_injected = sum(amt for _, amt in self.injection_log)
+            invested_ret = (final - self.invested_capital) / self.invested_capital * 100 if self.invested_capital > 0 else 0
+            print("  [자금 유입]")
+            print(f"    초기 시드       : ${self.initial_capital_krw:>13,.2f}")
+            print(f"    입금 횟수       : {len(self.injection_log)}회")
+            print(f"    총 입금액       : ${total_injected:>13,.2f}")
+            print(f"    총 투입원금     : ${self.invested_capital:>13,.2f}")
+            print(f"    매매 실현손익   : ${self.trading_pnl:>+13,.2f}")
+            print(f"    투입원금 수익률 : {invested_ret:>+.1f}%")
+            print(f"    총자산 수익률   : {total_ret:>+.1f}%")
+            print("-" * 70)
 
         # DCA statistics
         print("  [DCA 통계]")

@@ -18,7 +18,9 @@ CHART_DIR = PROJECT_ROOT / "charts"
 # ── 데이터 하위 디렉토리 ──────────────────────────────────────
 MARKET_DIR    = DATA_DIR / "market"
 CACHE_DIR     = MARKET_DIR / "cache"       # 종목별 일봉 캐시 (자동 갱신)
-OHLCV_DIR     = MARKET_DIR / "ohlcv"       # 백테스트용 합산 분봉
+OHLCV_DIR          = MARKET_DIR / "ohlcv"       # 백테스트용 합산 분봉
+OHLCV_1MIN_3Y      = MARKET_DIR / "ohlcv" / "backtest_1min_3y.parquet"  # 2023~ (기본)
+OHLCV_1MIN_DEFAULT = OHLCV_1MIN_3Y                                       # alias
 DAILY_DIR     = MARKET_DIR / "daily"       # 일봉 데이터
 FX_DIR        = MARKET_DIR / "fx"          # 환율
 POLY_DATA_DIR = DATA_DIR / "polymarket"    # Polymarket 확률 (연도별)
@@ -173,24 +175,24 @@ BEARISH_TICKERS_V2 = ["BRKU"]
 TOTAL_CAPITAL_USD = 15_000             # 총 투자금 $15,000
 INITIAL_BUY_USD = 2_250                # 초기 진입 금액 (15%)
 DCA_BUY_USD = 750                      # 물타기 1회 금액 (5%)
-DCA_DROP_PCT = -0.5                    # 물타기 트리거 하락률
+DCA_DROP_PCT = -1.35                   # 물타기 트리거 하락률 # Optuna v4_phase1 best  # was: -0.5
 DCA_MAX_COUNT = 7                      # 물타기 최대 횟수
 MAX_PER_STOCK_USD = 7_500              # 종목당 최대 투입 (50%)
-STOP_LOSS_BULLISH_PCT = -8.0           # 강세장 모드 손절 라인
+STOP_LOSS_BULLISH_PCT = -16.0          # 강세장 모드 손절 라인 # Optuna v4_phase1 best  # was: -8.0
 POLYMARKET_BULLISH_THRESHOLD = 70      # 강세장 모드 진입 기준 (%)
 MAX_HOLD_HOURS = 5                     # 기본 시간 손절 (시간)
-TAKE_PROFIT_PCT = 2.0                  # 강세장 연장 시 즉시 매도 기준 (%)
+TAKE_PROFIT_PCT = 4.0                  # 강세장 연장 시 즉시 매도 기준 (%) # Optuna v3_phase2 best  # was: 2.0
 BEARISH_DROP_THRESHOLD = -6.0          # 방어주 분할매수 진입 (%)
 BEARISH_BUY_DAYS = 5                   # 방어주 분할매수 기간 (일)
 BRKU_WEIGHT_PCT = 10                   # BRKU 포트폴리오 고정 비중 (%)
 
 # ── v2 매도/매수 추가 상수 ──────────────────────────────────────
-PAIR_GAP_SELL_THRESHOLD_V2 = 0.9     # 쌍둥이 0.9% 매도 갭 기준
+PAIR_GAP_SELL_THRESHOLD_V2 = 8.8     # 쌍둥이 매도 갭 기준 # Optuna v3_phase2 best  # was: 0.9
 PAIR_SELL_FIRST_PCT = 0.80           # 1차 매도 비율 (80%)
 PAIR_SELL_REMAINING_PCT = 0.30       # 잔여분 분할매도 비율 (30%)
 PAIR_SELL_INTERVAL_MIN = 5           # 분할매도 간격 (분)
 COIN_TRIGGER_PCT = 3.0               # COIN 매수 트리거 (ETHU/XXRP/SOLT 각각 +3%)
-COIN_SELL_PROFIT_PCT = 3.0           # COIN 일반 매도 순수익 기준 (+3%)
+COIN_SELL_PROFIT_PCT = 5.0           # COIN 일반 매도 순수익 기준 # Optuna v3/v4 일치  # was: 3.0
 COIN_SELL_BEARISH_PCT = 0.3          # COIN 하락장 즉시 매도 순수익 기준 (+0.3%)
 CONL_TRIGGER_PCT = 3.0               # CONL 매수 트리거 (ETHU/XXRP/SOLT 각각 +3%)
 CONL_SELL_PROFIT_PCT = 2.8           # CONL 수익 실현 매도 (순수익 +2.8%)
@@ -312,8 +314,8 @@ V4_SIDEWAYS_EMA_SLOPE_LOOKBACK_DAYS = 5
 V4_SIDEWAYS_BB_PERCENTILE_WINDOW_DAYS = 60
 
 # ── v4 서킷브레이커 (문서 기준 기본값) ───────────────────────────
-V4_CB_VIX_SPIKE_PCT = 6.0            # VIX 급등 기준 (+6%)
-V4_CB_VIX_COOLDOWN_DAYS = 7          # VIX 급등 시 차단 기간 (거래일)
+V4_CB_VIX_SPIKE_PCT = 3.0            # VIX 급등 기준 # Optuna v4_phase1 best  # was: 6.0
+V4_CB_VIX_COOLDOWN_DAYS = 13         # VIX 급등 시 차단 기간 (거래일) # Optuna v4_phase1 best  # was: 7
 V4_CB_GLD_SPIKE_PCT = 3.0            # GLD 급등 기준 (+3%)
 V4_CB_GLD_COOLDOWN_DAYS = 3          # GLD 급등 시 차단 기간 (거래일)
 V4_CB_BTC_CRASH_PCT = -5.0           # BTC 급락 기준 (-5%)
@@ -324,7 +326,7 @@ V4_CB_OVERHEAT_RECOVERY_PCT = -10.0  # 과열 해제 기준 (고점 대비 조�
 V4_HIGH_VOL_MOVE_PCT = 10.0           # 고변동성 판정 변동률 기준 (|%|)
 V4_HIGH_VOL_HIT_COUNT = 2             # 고변동성 판정 누적 횟수
 V4_HIGH_VOL_STOP_LOSS_PCT = -4.0      # 고변동성 고정 손절
-V4_CONL_ADX_MIN = 18.0                # CONL 조건부 진입 ADX 하한
+V4_CONL_ADX_MIN = 10.0                # CONL 조건부 진입 ADX 하한 # Optuna v4_phase1 best  # was: 18.0
 V4_CONL_EMA_PERIOD = 20               # CONL EMA 기간
 V4_CONL_EMA_SLOPE_LOOKBACK = 5        # EMA 기울기 계산용 lookback bars
 V4_CONL_EMA_SLOPE_MIN_PCT = 0.0       # EMA 기울기 하한 (%)
@@ -346,12 +348,12 @@ V4_CB_OVERHEAT_SWITCH_MAP = {
     "IRE": "IREN",
     "MSTU": None,
 }
-V4_SWING_TRIGGER_PCT = 15.0
+V4_SWING_TRIGGER_PCT = 27.5          # Optuna v4_study2 best  # was: 15.0
 V4_SWING_ELIGIBLE_TICKERS = ["SOXL", "SOXX", "CONL", "COIN", "IRE", "IREN"]
 V4_SWING_STAGE1_WEIGHT_PCT = 90.0
-V4_SWING_STAGE1_HOLD_DAYS = 63
-V4_SWING_STAGE1_ATR_MULT = 1.5
-V4_SWING_STAGE1_DRAWDOWN_PCT = -15.0
+V4_SWING_STAGE1_HOLD_DAYS = 21       # Optuna v4_study2 best  # was: 63
+V4_SWING_STAGE1_ATR_MULT = 2.5       # Optuna v4_study2 best  # was: 1.5
+V4_SWING_STAGE1_DRAWDOWN_PCT = -11.0  # Optuna v4_study2 best  # was: -15.0
 V4_SWING_STAGE2_GLD_TICKER = "GLD"
 V4_SWING_STAGE2_WEIGHT_PCT = 70.0
 V4_SWING_STAGE2_HOLD_DAYS = 105
@@ -442,6 +444,11 @@ V5_GDXU_HOLD_MIN_DAYS = 2
 V5_GDXU_HOLD_MAX_DAYS = 3
 V5_UNIX_REBALANCE_HOUR = 15
 V5_UNIX_REBALANCE_MINUTE = 55
+
+# ── 자금 유입 (기본값: 비활성) ────────────────────────────────
+INJECTION_PCT = 0              # 투입원금 대비 입금 %
+INJECTION_INTERVAL_DAYS = 0    # 거래일 간격 (0=비활성)
+SIZE_BY_INVESTED = False       # 투입원금 기반 사이징
 
 # CB 공통 대상 목록
 CB_OVERHEAT_TICKERS = ["SOXL", "CONL", "IRE", "MSTU"]

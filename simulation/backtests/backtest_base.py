@@ -79,6 +79,12 @@ class BacktestBase(ABC):
         self.total_trading_days: int = 0
         self.skipped_gold_bars: int = 0
 
+        # 자금 추적 (투입원금 vs 매매수익 분리)
+        self.invested_capital: float = params.total_capital
+        self.trading_pnl: float = 0.0
+        self.injection_log: list[tuple[date, float]] = []
+        self._injection_counter: int = 0
+
         # Version-specific init
         self._init_version_state()
 
@@ -218,20 +224,13 @@ class BacktestBase(ABC):
                        getattr(pos, 'total_invested_usd', 0.0))
 
     def _load_data(self) -> tuple[pd.DataFrame, dict]:
-        """공통 데이터를 로드한다.
-
-        start_date 가 2025-01-01 이전이면 3y 파일(2023~)을 사용하고,
-        그 이후이면 기본 파일(2025~)을 사용한다.
-        """
+        """공통 데이터를 로드한다. backtest_1min_3y.parquet 를 기본으로 사용한다."""
         import config
         print("[1/4] 데이터 준비")
-        if self.start_date < date(2025, 1, 1):
-            parquet_path = config.OHLCV_1MIN_3Y
-        else:
-            parquet_path = config.OHLCV_1MIN_DEFAULT
+        parquet_path = config.OHLCV_1MIN_DEFAULT
         print(f"  OHLCV: {parquet_path.name}")
         df = backtest_common.load_parquet(parquet_path)
-        # date 컬럼을 datetime.date 객체로 정규화 (3y 파일은 문자열로 저장됨)
+        # date 컬럼을 datetime.date 객체로 정규화 (문자열로 저장된 경우 변환)
         if "date" in df.columns and len(df) > 0 and isinstance(df["date"].iloc[0], str):
             import pandas as _pd
             df["date"] = _pd.to_datetime(df["date"]).dt.date
@@ -318,6 +317,16 @@ class BacktestBase(ABC):
             day_ts = day_timestamps[trading_date]
             poly_probs = poly.get(trading_date, None)
 
+            # Capital injection check
+            if self.params.injection_interval_days > 0 and self.params.injection_pct > 0:
+                self._injection_counter += 1
+                if self._injection_counter >= self.params.injection_interval_days:
+                    self._injection_counter = 0
+                    amount = self.invested_capital * self.params.injection_pct / 100
+                    self._apply_injection(amount)
+                    self.invested_capital += amount
+                    self.injection_log.append((trading_date, amount))
+
             # Day start
             day_ctx = self._on_day_start(
                 trading_date, day_idx, day_sym, day_ts, poly_probs, prev_close,
@@ -379,6 +388,10 @@ class BacktestBase(ABC):
             f"자산: {equity:,.2f}  "
             f"포지션: {len(self.positions)}개"
         )
+
+    def _apply_injection(self, amount: float) -> None:
+        """자금 유입을 적용한다. 서브클래스에서 오버라이드."""
+        self.cash += amount
 
     def _on_run_complete(self) -> None:
         """run() 완료 후 버전별 후처리. 서브클래스에서 오버라이드."""

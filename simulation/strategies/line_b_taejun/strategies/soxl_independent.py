@@ -16,55 +16,12 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from ..common.base import Action, BaseStrategy, ExitReason, MarketData, Position, Signal
+from ..common.indicators import compute_adx, ema_slope_positive
 from ..common.params import SOXL_INDEPENDENT
 from ..common.registry import register
 
 if TYPE_CHECKING:
     import pandas as pd
-
-
-def _compute_adx(df: "pd.DataFrame", period: int = 14) -> float:
-    """ADX(14) 계산."""
-    import pandas as pd
-
-    high = df["high"].astype(float)
-    low = df["low"].astype(float)
-    close = df["close"].astype(float)
-    prev_close = close.shift(1)
-
-    tr = pd.concat([
-        high - low,
-        (high - prev_close).abs(),
-        (low - prev_close).abs(),
-    ], axis=1).max(axis=1)
-
-    plus_dm = high.diff().clip(lower=0)
-    minus_dm = (-low.diff()).clip(lower=0)
-    mask = plus_dm > minus_dm
-    plus_dm = plus_dm.where(mask, 0.0)
-    minus_dm = minus_dm.where(~mask, 0.0)
-
-    tr_s = tr.rolling(period).mean()
-    plus_s = plus_dm.rolling(period).mean()
-    minus_s = minus_dm.rolling(period).mean()
-
-    plus_di = 100 * plus_s / tr_s.replace(0, float("nan"))
-    minus_di = 100 * minus_s / tr_s.replace(0, float("nan"))
-    di_sum = (plus_di + minus_di).replace(0, float("nan"))
-    dx = 100 * (plus_di - minus_di).abs() / di_sum
-    adx = dx.rolling(period).mean()
-    val = adx.iloc[-1]
-    import math
-    return float(val) if not math.isnan(val) else 0.0
-
-
-def _ema_slope_positive(df: "pd.DataFrame", span: int = 20) -> bool:
-    """20 EMA 기울기 양수 여부."""
-    close = df["close"].astype(float)
-    ema = close.ewm(span=span, adjust=False).mean()
-    if len(ema) < 2:
-        return False
-    return ema.iloc[-1] > ema.iloc[-2]
 
 
 @register
@@ -101,7 +58,7 @@ class SoxlIndependentStrategy(BaseStrategy):
         ohlcv = market.ohlcv or {}
         soxx_df = ohlcv.get("SOXX") or ohlcv.get("SOXL")
         if soxx_df is not None and len(soxx_df) >= 20:
-            adx_val = _compute_adx(soxx_df)
+            adx_val = compute_adx(soxx_df)
             if adx_val < adx_min:
                 return False
         # OHLCV 없으면 ADX 체크 스킵 (백테스트 호환)
@@ -125,7 +82,7 @@ class SoxlIndependentStrategy(BaseStrategy):
         ohlcv = market.ohlcv or {}
         soxx_df = ohlcv.get("SOXX") or ohlcv.get("SOXL")
         if soxx_df is not None and len(soxx_df) >= 21:
-            if not _ema_slope_positive(soxx_df):
+            if not ema_slope_positive(soxx_df):
                 return True
 
         return False
@@ -134,14 +91,14 @@ class SoxlIndependentStrategy(BaseStrategy):
         """매도 조건 (40% 1차 or 60% 고정익절)."""
         ticker = self.params.get("ticker", "SOXL")
         current = market.prices.get(ticker, 0.0)
-        if current <= 0 or position.avg_price <= 0:
+        pnl = position.pnl_pct(current)
+        if pnl is None:
             return False
 
-        pnl_pct = (current - position.avg_price) / position.avg_price * 100
         tp_pct = self.params.get("sell_tp_pct", 5.0)
 
         # 60% 고정 익절 조건
-        if pnl_pct >= tp_pct:
+        if pnl >= tp_pct:
             return True
 
         # 40% 모멘텀 약화 조건 (1차 매도 미완료 시만)
@@ -190,7 +147,7 @@ class SoxlIndependentStrategy(BaseStrategy):
         if current <= 0:
             return Signal(Action.HOLD, ticker, 0, 0, "soxl_independent: no price data")
 
-        pnl_pct = (current - position.avg_price) / position.avg_price * 100
+        pnl_pct = position.pnl_pct(current) or 0.0
         tp_pct = self.params.get("sell_tp_pct", 5.0)
         tp_ratio = self.params.get("sell_tp_ratio", 0.60)         # 60%
         momentum_ratio = self.params.get("sell_momentum_ratio", 0.40)  # 40%

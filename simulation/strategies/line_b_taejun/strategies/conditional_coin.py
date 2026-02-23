@@ -12,7 +12,12 @@ from ..common.registry import register
 
 @register
 class ConditionalCoinStrategy(BaseStrategy):
-    """ETHU/XXRP/SOLT 트리거 기반 COIN 조건부 매수."""
+    """ETHU/XXRP/SOLT 트리거 기반 COIN 조건부 매수.
+
+    Note: 이 전략은 evaluate() 인터페이스를 사용합니다.
+    generate_signal()은 항상 SKIP을 반환하며,
+    composite_signal_engine에서 evaluate()를 직접 호출합니다.
+    """
 
     name = "conditional_coin"
     version = "1.0"

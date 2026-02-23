@@ -12,7 +12,12 @@ from ..common.registry import register
 
 @register
 class BearishDefenseStrategy(BaseStrategy):
-    """하락장 감지 시 BRKU 포트폴리오 비중 고정."""
+    """하락장 감지 시 BRKU 포트폴리오 비중 고정.
+
+    Note: 이 전략은 evaluate() 인터페이스를 사용합니다.
+    generate_signal()은 항상 SKIP을 반환하며,
+    composite_signal_engine에서 evaluate()를 직접 호출합니다.
+    """
 
     name = "bearish_defense"
     version = "1.0"

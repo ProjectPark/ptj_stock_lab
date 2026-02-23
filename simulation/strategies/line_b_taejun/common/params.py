@@ -3,7 +3,14 @@ taejun_attach_pattern - 전략 파라미터 정의
 ==========================================
 모든 전략의 조건/임계값을 코드와 분리하여 관리.
 출처: kakaotalk_trading_notes_2026-02-19.csv (박태준)
+
+Re-export: BaseParams/V5Params 등은 simulation.strategies.params에서
+정의되며, line_b_taejun 내부 모듈은 이 파일을 통해 접근한다.
 """
+
+# Re-export dataclass params for line_b_taejun internal use.
+# 원본: simulation/strategies/params.py
+from simulation.strategies.params import BaseParams, V5Params  # noqa: F401
 
 # ============================================================
 # 잽모드 SOXL (Jab-SOXL) — 반도체 레버리지 프리마켓 단타
@@ -65,18 +72,6 @@ JAB_TSLL = {
     "max_amount_krw": 2_000_000,  # 최대 매수 금액 (원)
     "entry_start_kst": (17, 30),
     "ticker": "TSLL",
-}
-
-# ============================================================
-# 숏 잽모드 SETH (Jab-SETH) — 이더리움 숏 단타 (Legacy)
-# ============================================================
-JAB_SETH = {
-    "poly_down_spread_min": 12.0,  # 최고 하락기대 - 평균 >= 12pp
-    "gld_min": 0.01,               # GLD 최소 변동률 (%)
-    "seth_min": 0.0,               # SETH 최소 변동률 (%) — 양전
-    "target_pct": 0.5,             # 목표 수익률 (%)
-    "size": 1.0,
-    "ticker": "SETH",
 }
 
 # ============================================================
@@ -406,7 +401,7 @@ POLY_QUALITY = {
 # ============================================================
 ASSET_MODE = {
     "attack_strategies": [
-        "jab_soxl", "jab_bitu", "jab_tsll", "jab_seth",
+        "jab_soxl", "jab_bitu", "jab_tsll", "jab_etq",
         "bargain_buy", "vix_gold", "sp500_entry", "bank_conditional",
         "short_macro", "emergency_mode",
         "crash_buy", "soxl_independent",          # v5 신규
@@ -540,9 +535,9 @@ SIDEWAYS_DETECTOR = {
 # Bear Regime 감지기 파라미터 — todd_fuck_v1
 # ============================================================
 # 급락 체제 선언 조건 (AND):
-#   - btc_up < 0.38  (시장 컨센서스 비관)
+#   - btc_up < 0.43  (시장 컨센서스 비관, v2 OOS: 0.38→0.43)
 #   - btc_monthly_dip > 0.30 (이달 저점 도달 확률 높음)
-# 체제 해제: btc_up > 0.50 회복 (히스테리시스)
+# 체제 해제: btc_up > 0.57 회복 (히스테리시스, v2 OOS: 0.50→0.57)
 # 체제 ON 시: 롱 레버리지 50% 축소 + 인버스 ETF 진입 허용
 # ============================================================
 BEAR_REGIME = {

@@ -102,10 +102,10 @@ class EmergencyMode(BaseStrategy):
     def check_exit(self, market: MarketData, position: Position) -> bool:
         """이머전시 모드에서는 수익중 포지션을 즉시 매도."""
         current = market.prices.get(position.ticker, 0)
-        if current <= 0 or position.avg_price <= 0:
+        pnl = position.pnl_pct(current)
+        if pnl is None:
             return False
-        pnl_pct = (current - position.avg_price) / position.avg_price * 100
-        return pnl_pct > 0
+        return pnl > 0
 
     def generate_signal(self, market: MarketData,
                         position: Position | None = None) -> Signal:
@@ -114,7 +114,7 @@ class EmergencyMode(BaseStrategy):
             current = market.prices.get(position.ticker, 0)
             if current <= 0:
                 return Signal(Action.HOLD, position.ticker, 0, 0, "no price data")
-            pnl_pct = (current - position.avg_price) / position.avg_price * 100
+            pnl_pct = position.pnl_pct(current) or 0.0
             if pnl_pct > 0:
                 return Signal(
                     action=Action.SELL,

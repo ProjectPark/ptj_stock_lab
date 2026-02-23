@@ -181,6 +181,15 @@ class Position:
     stage: int = 1
     confirmed: bool = False
 
+    def pnl_pct(self, current_price: float) -> float | None:
+        """매수 평균가 대비 현재 손익률(%)을 반환한다.
+
+        Returns None if current_price or avg_price is non-positive.
+        """
+        if current_price <= 0 or self.avg_price <= 0:
+            return None
+        return (current_price - self.avg_price) / self.avg_price * 100
+
 
 # ---------------------------------------------------------------------------
 # Base strategy
@@ -225,7 +234,13 @@ class BaseStrategy(ABC):
         """복수 시그널 생성 (IAU+GDXU 동시 매수 등 다종목 전략용).
 
         기본 구현은 generate_signal()을 래핑하여 단일 시그널 반환.
-        복수 종목을 다루는 전략에서 오버라이드.
+        복수 종목을 다루는 전략(예: VixGold)에서 오버라이드.
+
+        인터페이스 사용 패턴:
+        - 단일 종목 전략: generate_signal() 구현, generate_signals()는 기본 래퍼 사용
+        - 다종목 전략 (VixGold 등): generate_signals() 오버라이드
+        - evaluate() 전략 (TwinPair, ConditionalCoin 등):
+          generate_signal()은 SKIP 반환, composite_signal_engine이 evaluate() 직접 호출
 
         Parameters
         ----------

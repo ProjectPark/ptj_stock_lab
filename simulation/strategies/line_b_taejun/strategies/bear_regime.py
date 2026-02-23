@@ -9,11 +9,11 @@ Polymarket 절대값 기반으로 급락 체제를 선언하고
   - BearRegime: 절대값 수준 기반 → 지속 체제 관리
 
 체제 ON 조건 (AND):
-  btc_up < 0.38          ← 시장 컨센서스 비관
+  btc_up < 0.43          ← 시장 컨센서스 비관 (v2 OOS: 0.38→0.43)
   btc_monthly_dip > 0.30 ← 이달 저점 도달 확률 높음
 
 체제 OFF (히스테리시스):
-  btc_up > 0.50 회복 시 해제
+  btc_up > 0.57 회복 시 해제 (v2 OOS: 0.50→0.57)
 
 체제 ON 효과:
   - 모든 롱 전략 unit_mul × 0.5 축소
@@ -150,11 +150,11 @@ class BearRegimeDetector:
         """급락 체제 여부 판정.
 
         ON 조건 (AND):
-          btc_up < btc_up_min (0.38)
+          btc_up < btc_up_min (0.43)
           btc_monthly_dip > monthly_dip_min (0.30)
 
         OFF 조건 (히스테리시스):
-          btc_up >= recovery_threshold (0.50)
+          btc_up >= recovery_threshold (0.57)
         """
         poly = market.poly or {}
         btc_up = poly.get("btc_up", 0.5)
@@ -288,7 +288,7 @@ class BearRegimeLong(BaseStrategy):
 
     name = "bear_regime_long"
     version = "1.0"
-    description = "급락 체제(btc_up<38%, monthly_dip>30%) → 인버스 ETF 매수"
+    description = "급락 체제(btc_up<43%, monthly_dip>30%) → 인버스 ETF 매수"
 
     def __init__(self, params: dict | None = None):
         super().__init__(params or BEAR_REGIME)
@@ -312,8 +312,8 @@ class BearRegimeLong(BaseStrategy):
 
         # P2-P3: 목표/손절
         current = market.prices.get(position.ticker, 0)
-        if current > 0 and position.avg_price > 0:
-            pnl_pct = (current - position.avg_price) / position.avg_price * 100
+        pnl_pct = position.pnl_pct(current)
+        if pnl_pct is not None:
             target = self.params.get("inv_target_pct", 8.0)
             stoploss = self.params.get("inv_stop_loss_pct", -5.0)
             if pnl_pct >= target:
@@ -344,8 +344,8 @@ class BearRegimeLong(BaseStrategy):
                     reason_text = "체제 해제"
                 else:
                     current = market.prices.get(position.ticker, 0)
-                    if current > 0 and position.avg_price > 0:
-                        pnl_pct = (current - position.avg_price) / position.avg_price * 100
+                    pnl_pct = position.pnl_pct(current)
+                    if pnl_pct is not None:
                         target = self.params.get("inv_target_pct", 8.0)
                         stoploss = self.params.get("inv_stop_loss_pct", -5.0)
                         if pnl_pct >= target:

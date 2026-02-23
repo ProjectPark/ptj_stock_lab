@@ -16,8 +16,8 @@ v5 추가:
 반환 dict는 기존 7-key + v5 5-key = 12-key.
 
 Usage:
-    from strategies.taejun_attach_pattern.composite_signal_engine import CompositeSignalEngine
-    from strategies.params import V5Params
+    from simulation.strategies.line_b_taejun.composite_signal_engine import CompositeSignalEngine
+    from simulation.strategies.line_b_taejun.common.params import V5Params
 
     engine = CompositeSignalEngine.from_base_params(V5Params())
     sigs = engine.generate_all_signals(changes, poly_probs, pairs, sideways_active)
@@ -28,7 +28,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 from typing import TYPE_CHECKING
 
-from ..params import BaseParams
+from .common.params import BaseParams
 
 from .filters.circuit_breaker import CircuitBreaker
 from .strategies.crash_buy import CrashBuyStrategy
@@ -307,6 +307,52 @@ class CompositeSignalEngine:
         if pairs is None:
             pairs = {}
 
+        # Phase 1: 세션/CB/시황 필터 (Steps 0~2)
+        m201_result, cb_status_dict, market_mode, gold = (
+            self._prepare_session_and_filters(
+                changes, poly_probs, sideways_active,
+                market_data, prices, crypto_changes, market_time,
+            )
+        )
+
+        # Phase 2: 핵심 전략 시그널 (Steps 3~7)
+        effective_mode = market_mode if market_mode != "sideways" else "normal"
+        core = self._generate_core_signals(
+            changes, pairs, volumes, effective_mode,
+        )
+
+        # Phase 3: v5 부가 시그널 (Steps 8~11)
+        aux = self._generate_auxiliary_signals(market_data, positions)
+
+        return {
+            # existing 7 keys (backward compat)
+            "market_mode": market_mode,
+            "gold": gold,
+            **core,
+            # v5 new 5 keys
+            "circuit_breaker": cb_status_dict,
+            **aux,
+            "m201": m201_result,
+        }
+
+    # ------------------------------------------------------------------
+    # Phase 1: 세션 갱신, M201, Circuit Breaker, 시황/금 필터
+    # ------------------------------------------------------------------
+
+    def _prepare_session_and_filters(
+        self,
+        changes: dict,
+        poly_probs: dict | None,
+        sideways_active: bool,
+        market_data: "MarketData | None",
+        prices: dict | None,
+        crypto_changes: dict | None,
+        market_time: "datetime | None",
+    ) -> tuple[dict | None, dict, str, dict]:
+        """Steps 0~2: 세션/CB/시황 판단.
+
+        Returns (m201_result, cb_status_dict, market_mode, gold).
+        """
         # ── Step 0a: CI-0-7 세션 날짜 갱신 + CI-0-8 M5 카운트 초기화 ──
         self._maybe_reset_session(market_time)
 
@@ -327,7 +373,6 @@ class CompositeSignalEngine:
         # ── Step 0b: Circuit Breaker 평가 ────────────────────────────
         cb_status_dict: dict = {}
         if self.circuit_breaker is not None:
-            # Flatten changes for CB (expects {ticker: float})
             flat_changes = {}
             for ticker, data in changes.items():
                 if isinstance(data, dict):
@@ -353,24 +398,61 @@ class CompositeSignalEngine:
         gld_pct = gld_data.get("change_pct", 0.0) if isinstance(gld_data, dict) else float(gld_data)
         gold = self.gold_filter.evaluate(gld_pct)
 
+        return m201_result, cb_status_dict, market_mode, gold
+
+    # ------------------------------------------------------------------
+    # Phase 2: 핵심 전략 시그널 (Steps 3~7)
+    # ------------------------------------------------------------------
+
+    def _generate_core_signals(
+        self,
+        changes: dict,
+        pairs: dict,
+        volumes: dict | None,
+        effective_mode: str,
+    ) -> dict:
+        """Steps 3~7: twin_pairs, conditional_coin/conl, stop_loss, bearish.
+
+        Returns dict with keys: twin_pairs, conditional_coin, conditional_conl,
+        stop_loss, bearish.
+        """
         # ── Step 3: 쌍둥이 페어 (volumes 전달) ──────────────────────
         twin_pairs = self.twin_pair.evaluate(changes, pairs, volumes=volumes)
 
         # ── Step 4: 조건부 COIN (sideways면 normal 모드로 처리) ──────
-        effective_mode = market_mode if market_mode != "sideways" else "normal"
         conditional_coin = self.conditional_coin.evaluate(changes, mode=effective_mode)
 
         # ── Step 5: 조건부 CONL ──────────────────────────────────────
         conditional_conl = self.conditional_conl.evaluate(changes)
 
         # ── Step 6: 손절 ─────────────────────────────────────────────
-        # ATR 기반 손절 (v5) — positions/market_data가 있을 때 활성화
-        # 그 외에는 legacy 변동률 기반 손절 유지
         stop_loss = self._check_stop_loss(changes, effective_mode)
 
         # ── Step 7: 하락장 방어 ──────────────────────────────────────
         bearish = self.bearish_defense.evaluate(effective_mode)
 
+        return {
+            "twin_pairs": twin_pairs,
+            "conditional_coin": conditional_coin,
+            "conditional_conl": conditional_conl,
+            "stop_loss": stop_loss,
+            "bearish": bearish,
+        }
+
+    # ------------------------------------------------------------------
+    # Phase 3: v5 부가 시그널 (Steps 8~11)
+    # ------------------------------------------------------------------
+
+    def _generate_auxiliary_signals(
+        self,
+        market_data: "MarketData | None",
+        positions: "dict[str, Position] | None",
+    ) -> dict:
+        """Steps 8~11: vix_defense, crash_buy, soxl_independent, swing_mode.
+
+        Returns dict with keys: vix_defense, crash_buy, soxl_independent,
+        swing_mode.
+        """
         # ── Step 8: VIX 방어모드 (멀티 시그널) ───────────────────────
         vix_signals: list[dict] = []
         if self.vix_gold is not None and market_data is not None:
@@ -440,21 +522,10 @@ class CompositeSignalEngine:
                     swing_status["signals"] = []
 
         return {
-            # existing 7 keys (backward compat)
-            "market_mode": market_mode,
-            "gold": gold,
-            "twin_pairs": twin_pairs,
-            "conditional_coin": conditional_coin,
-            "conditional_conl": conditional_conl,
-            "stop_loss": stop_loss,
-            "bearish": bearish,
-            # v5 new 5 keys
-            "circuit_breaker": cb_status_dict,
             "vix_defense": vix_signals,
             "crash_buy": crash_buy_signal,
             "soxl_independent": soxl_signal,
             "swing_mode": swing_status,
-            "m201": m201_result,
         }
 
     def _check_stop_loss(self, changes: dict, mode: str) -> list[dict]:

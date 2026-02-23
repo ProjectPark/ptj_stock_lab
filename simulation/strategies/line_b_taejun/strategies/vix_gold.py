@@ -95,9 +95,9 @@ class VixGold(BaseStrategy):
 
     def _should_exit_gdxu(self, market: MarketData, position: Position) -> bool:
         current = market.prices.get("GDXU", 0.0)
-        if current <= 0 or position.avg_price <= 0:
+        pnl_pct = position.pnl_pct(current)
+        if pnl_pct is None:
             return False
-        pnl_pct = (current - position.avg_price) / position.avg_price * 100
         gdxu_min = self.params.get("gdxu_min_days", 2)
         gdxu_max = self.params.get("gdxu_max_days", 3)
         cooldown_trigger = self.params.get("gdxu_cooldown_trigger", -12.0)
@@ -109,9 +109,9 @@ class VixGold(BaseStrategy):
 
     def _should_exit_iau(self, market: MarketData, position: Position) -> bool:
         current = market.prices.get("IAU", 0.0)
-        if current <= 0 or position.avg_price <= 0:
+        pnl_pct = position.pnl_pct(current)
+        if pnl_pct is None:
             return False
-        pnl_pct = (current - position.avg_price) / position.avg_price * 100
         return pnl_pct <= self.params.get("iau_stop_pct", -5.0)
 
     # ------------------------------------------------------------------
@@ -247,7 +247,7 @@ class VixGold(BaseStrategy):
         if current <= 0:
             return Signal(Action.HOLD, "GDXU", 0, 0, "vix_gold: no GDXU price")
 
-        pnl_pct = (current - position.avg_price) / position.avg_price * 100
+        pnl_pct = position.pnl_pct(current) or 0.0
         gdxu_min = self.params.get("gdxu_min_days", 2)
         gdxu_max = self.params.get("gdxu_max_days", 3)
         cooldown_trigger = self.params.get("gdxu_cooldown_trigger", -12.0)
@@ -317,7 +317,7 @@ class VixGold(BaseStrategy):
         if current <= 0:
             return Signal(Action.HOLD, "IAU", 0, 0, "vix_gold: no IAU price")
 
-        pnl_pct = (current - position.avg_price) / position.avg_price * 100
+        pnl_pct = position.pnl_pct(current) or 0.0
         stop_pct = self.params.get("iau_stop_pct", -5.0)
 
         if pnl_pct <= stop_pct:

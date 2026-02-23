@@ -21,6 +21,7 @@ from simulation.strategies.line_b_taejun.common.params import (
     BARGAIN_BUY,
     EMERGENCY_MODE,
     JAB_BITU,
+    JAB_ETQ,
     JAB_TSLL,
     POLY_QUALITY,
     REIT_RISK,
@@ -35,6 +36,7 @@ from simulation.strategies.line_b_taejun.strategies.bargain_buy import BargainBu
 from simulation.strategies.line_b_taejun.strategies.reit_risk import ReitRisk
 from simulation.strategies.line_b_taejun.strategies.sector_rotate import SectorRotate
 from simulation.strategies.line_b_taejun.strategies.emergency_mode import EmergencyMode
+from simulation.strategies.line_b_taejun.strategies.jab_etq import JabETQ
 from simulation.strategies.line_b_taejun.filters.poly_quality import PolyQualityFilter
 from simulation.strategies.line_b_taejun.filters.asset_mode import (
     AssetMode,
@@ -91,25 +93,25 @@ class TestQ6_Q7_Confirmed:
 # ============================================================
 
 
-class TestQ2_SETH_Entry:
-    """Q-2: SETH 진입 조건 — Polymarket 하락기대 스프레드 12pp"""
+class TestQ2_ETQ_Entry:
+    """Q-2: ETQ 진입 조건 — Polymarket 하락기대 스프레드 12pp"""
 
     def _make_market(self, poly: dict) -> MarketData:
         return MarketData(
-            changes={"GLD": 0.05, "SETH": 0.01},
-            prices={"SETH": 10.0},
+            changes={"GLD": 0.05, "ETQ": 0.01},
+            prices={"ETQ": 10.0},
             poly=poly,
             time=datetime(2026, 2, 19, 18, 0),
         )
 
     def test_param_renamed(self):
         """poly_eth_down_min → poly_down_spread_min"""
-        assert "poly_down_spread_min" in JAB_SETH
-        assert "poly_eth_down_min" not in JAB_SETH
+        assert "poly_down_spread_min" in JAB_ETQ
+        assert "poly_eth_down_min" not in JAB_ETQ
 
     def test_entry_when_spread_high(self):
         """하락기대 스프레드 >= 12pp → 진입"""
-        strat = JabSETH()
+        strat = JabETQ()
         # btc_up=0.5 → down=50, eth_up=0.1 → down=90, ndx_up=0.5 → down=50
         # max_down=90, avg=63.3, spread=26.7 >= 12 → True
         market = self._make_market({"btc_up": 0.5, "eth_up": 0.1, "ndx_up": 0.5})
@@ -117,7 +119,7 @@ class TestQ2_SETH_Entry:
 
     def test_no_entry_when_spread_low(self):
         """하락기대 스프레드 < 12pp → 미진입"""
-        strat = JabSETH()
+        strat = JabETQ()
         # btc_up=0.5 → down=50, eth_up=0.45 → down=55, ndx_up=0.5 → down=50
         # max_down=55, avg=51.67, spread=3.33 < 12 → False
         market = self._make_market({"btc_up": 0.5, "eth_up": 0.45, "ndx_up": 0.5})
@@ -125,11 +127,11 @@ class TestQ2_SETH_Entry:
 
     def test_no_entry_without_poly(self):
         market = MarketData(
-            changes={"GLD": 0.05, "SETH": 0.01},
-            prices={"SETH": 10.0}, poly=None,
+            changes={"GLD": 0.05, "ETQ": 0.01},
+            prices={"ETQ": 10.0}, poly=None,
             time=datetime(2026, 2, 19),
         )
-        strat = JabSETH()
+        strat = JabETQ()
         assert strat.check_entry(market) is False
 
 
@@ -470,19 +472,32 @@ class TestAssetMode:
 # ============================================================
 
 
+def _ensure_strategies_imported():
+    """@register 데코레이터 실행을 위해 전략 모듈을 강제 임포트."""
+    from simulation.strategies.line_b_taejun.strategies import (  # noqa: F401
+        bargain_buy, bearish_defense, bank_conditional,
+        conditional_coin, conditional_conl, crash_buy,
+        emergency_mode, jab_bitu, jab_etq, jab_soxl, jab_tsll,
+        reit_risk, sector_rotate, short_macro, soxl_independent,
+        sp500_entry, twin_pair, vix_gold,
+    )
+
+
 class TestRegistration:
     """신규 전략이 레지스트리에 등록되었는지 확인."""
 
     def test_emergency_mode_registered(self):
-        from simulation.strategies.taejun_attach_pattern import list_strategies
+        _ensure_strategies_imported()
+        from simulation.strategies.line_b_taejun.common.registry import list_strategies
         strategies = list_strategies()
         assert "emergency_mode" in strategies
 
     def test_all_expected_strategies(self):
-        from simulation.strategies.taejun_attach_pattern import list_strategies
+        _ensure_strategies_imported()
+        from simulation.strategies.line_b_taejun.common.registry import list_strategies
         strategies = list_strategies()
         expected = [
-            "bargain_buy", "jab_bitu", "jab_tsll", "jab_seth", "jab_soxl",
+            "bargain_buy", "jab_bitu", "jab_tsll", "jab_etq", "jab_soxl",
             "vix_gold", "sp500_entry", "sector_rotate", "bank_conditional",
             "short_macro", "reit_risk", "emergency_mode",
         ]
@@ -499,62 +514,62 @@ class TestMTVNQ3_ParamsCorrections:
     """MT_VNQ3 파라미터 정정 검증."""
 
     def test_jab_soxl_target(self):
-        from simulation.strategies.taejun_attach_pattern.params import JAB_SOXL
+        from simulation.strategies.line_b_taejun.common.params import JAB_SOXL
         assert JAB_SOXL["target_pct"] == 1.15, f"M20 +0.25%: expected 1.15, got {JAB_SOXL['target_pct']}"
 
     def test_jab_bitu_target(self):
-        from simulation.strategies.taejun_attach_pattern.params import JAB_BITU
+        from simulation.strategies.line_b_taejun.common.params import JAB_BITU
         assert JAB_BITU["target_pct"] == 1.15, f"M20 +0.25%: expected 1.15, got {JAB_BITU['target_pct']}"
 
     def test_jab_tsll_target(self):
-        from simulation.strategies.taejun_attach_pattern.params import JAB_TSLL
+        from simulation.strategies.line_b_taejun.common.params import JAB_TSLL
         assert JAB_TSLL["target_pct"] == 1.25, f"M20 +0.25%: expected 1.25, got {JAB_TSLL['target_pct']}"
 
     def test_jab_tsll_gld_max(self):
-        from simulation.strategies.taejun_attach_pattern.params import JAB_TSLL
+        from simulation.strategies.line_b_taejun.common.params import JAB_TSLL
         assert JAB_TSLL["gld_max"] == 0.1, f"Q-5: expected 0.1, got {JAB_TSLL['gld_max']}"
 
     def test_jab_etq_target(self):
-        from simulation.strategies.taejun_attach_pattern.params import JAB_ETQ
+        from simulation.strategies.line_b_taejun.common.params import JAB_ETQ
         assert JAB_ETQ["target_pct"] == 1.05, f"CI-9: expected 1.05, got {JAB_ETQ['target_pct']}"
 
     def test_bank_conditional_target(self):
-        from simulation.strategies.taejun_attach_pattern.params import BANK_CONDITIONAL
+        from simulation.strategies.line_b_taejun.common.params import BANK_CONDITIONAL
         assert BANK_CONDITIONAL["target_pct"] == 1.05, f"CI-9: expected 1.05, got {BANK_CONDITIONAL['target_pct']}"
 
     def test_sp500_entry_target(self):
-        from simulation.strategies.taejun_attach_pattern.params import SP500_ENTRY
+        from simulation.strategies.line_b_taejun.common.params import SP500_ENTRY
         assert SP500_ENTRY["target_pct"] == 1.75, f"M20 +0.25%: expected 1.75, got {SP500_ENTRY['target_pct']}"
 
     def test_vix_gold_target(self):
-        from simulation.strategies.taejun_attach_pattern.params import VIX_GOLD
+        from simulation.strategies.line_b_taejun.common.params import VIX_GOLD
         assert VIX_GOLD["target_pct"] == 10.25, f"M20 +0.25%: expected 10.25, got {VIX_GOLD['target_pct']}"
 
     def test_brku_drop(self):
-        from simulation.strategies.taejun_attach_pattern.params import BARGAIN_BUY
+        from simulation.strategies.line_b_taejun.common.params import BARGAIN_BUY
         assert BARGAIN_BUY["tickers"]["BRKU"]["drop_pct"] == -31, \
             f"Q-6: expected -31, got {BARGAIN_BUY['tickers']['BRKU']['drop_pct']}"
 
     def test_ethu_add_size_zero(self):
-        from simulation.strategies.taejun_attach_pattern.params import BARGAIN_BUY
+        from simulation.strategies.line_b_taejun.common.params import BARGAIN_BUY
         assert BARGAIN_BUY["tickers"]["ETHU"]["add_size"] == 0, \
             f"Q-7: expected 0, got {BARGAIN_BUY['tickers']['ETHU']['add_size']}"
 
     def test_reit_risk_vnq(self):
-        from simulation.strategies.taejun_attach_pattern.params import REIT_RISK
+        from simulation.strategies.line_b_taejun.common.params import REIT_RISK
         assert REIT_RISK["conditions"]["reits"] == ["VNQ"], \
             f"VNQ primary: expected ['VNQ'], got {REIT_RISK['conditions']['reits']}"
 
     def test_reit_risk_kr_aux(self):
-        from simulation.strategies.taejun_attach_pattern.params import REIT_RISK
+        from simulation.strategies.line_b_taejun.common.params import REIT_RISK
         assert "reits_kr_aux" in REIT_RISK["conditions"], "KR auxiliary reits key missing"
 
     def test_engine_config_no_chase(self):
-        from simulation.strategies.taejun_attach_pattern.params import ENGINE_CONFIG
+        from simulation.strategies.line_b_taejun.common.params import ENGINE_CONFIG
         assert ENGINE_CONFIG.get("no_chase_buy") is True, "no_chase_buy should be True"
 
     def test_engine_config_t5_timeout(self):
-        from simulation.strategies.taejun_attach_pattern.params import ENGINE_CONFIG
+        from simulation.strategies.line_b_taejun.common.params import ENGINE_CONFIG
         assert ENGINE_CONFIG.get("m5_t5_reserve_timeout_sec") == 10, "T5 timeout should be 10"
 
 
@@ -562,19 +577,19 @@ class TestMTVNQ3_M201ShortThreshold:
     """M201 SHORT 청산 기준 0.55 검증."""
 
     def test_short_close_at_055(self):
-        from simulation.strategies.taejun_attach_pattern.m201_mode import M201ImmediateMode
+        from simulation.strategies.line_b_taejun.infra.m201_mode import M201ImmediateMode
         m201 = M201ImmediateMode()
         result = m201.check_short(0.55, 0.50)
         assert result is not None, "p=0.55 should trigger CLOSE_SHORT"
 
     def test_short_no_close_at_054(self):
-        from simulation.strategies.taejun_attach_pattern.m201_mode import M201ImmediateMode
+        from simulation.strategies.line_b_taejun.infra.m201_mode import M201ImmediateMode
         m201 = M201ImmediateMode()
         result = m201.check_short(0.54, 0.50)
         assert result is None, "p=0.54 should NOT trigger CLOSE_SHORT"
 
     def test_short_close_at_060(self):
-        from simulation.strategies.taejun_attach_pattern.m201_mode import M201ImmediateMode
+        from simulation.strategies.line_b_taejun.infra.m201_mode import M201ImmediateMode
         m201 = M201ImmediateMode()
         result = m201.check_short(0.60, 0.50)
         assert result is not None, "p=0.60 should still trigger CLOSE_SHORT"
@@ -584,43 +599,43 @@ class TestMTVNQ3_NewModules:
     """MT_VNQ3 신규 모듈 임포트 검증."""
 
     def test_limit_order_import(self):
-        from simulation.strategies.taejun_attach_pattern.limit_order import (
+        from simulation.strategies.line_b_taejun.infra.limit_order import (
             LimitOrder, OrderQueue, OrderStatus, FillEvent, CancelEvent,
         )
         assert OrderStatus.PENDING.value == "pending"
 
     def test_m200_import(self):
-        from simulation.strategies.taejun_attach_pattern.m200_stop import M200KillSwitch
+        from simulation.strategies.line_b_taejun.infra.m200_stop import M200KillSwitch
         ks = M200KillSwitch()
         assert ks._poly_btc_enabled is False  # P-5: OFF
 
     def test_m28_import(self):
-        from simulation.strategies.taejun_attach_pattern.m28_poly_gate import M28PolyGate
+        from simulation.strategies.line_b_taejun.infra.m28_poly_gate import M28PolyGate
         gate = M28PolyGate()
         assert gate.btc_gate(0.55) == "LONG"
         assert gate.btc_gate(0.45) == "SHORT"
         assert gate.btc_gate(0.50) == "NEUTRAL"
 
     def test_schd_import(self):
-        from simulation.strategies.taejun_attach_pattern.schd_master import SCHDMaster
+        from simulation.strategies.line_b_taejun.infra.schd_master import SCHDMaster
         schd = SCHDMaster()
         assert schd.is_sell_blocked("SCHD") is True
         assert schd.is_sell_blocked("SOXL") is False
 
     def test_m5_weight_manager(self):
-        from simulation.strategies.taejun_attach_pattern.m5_weight_manager import M5WeightManager
+        from simulation.strategies.line_b_taejun.infra.m5_weight_manager import M5WeightManager
         m5 = M5WeightManager()
         amounts = m5.sequential_allocations(10000)
         assert len(amounts) == 4
         assert abs(sum(amounts) - 10000) < 0.01
 
     def test_orchestrator_import(self):
-        from simulation.strategies.taejun_attach_pattern.orchestrator import Orchestrator
+        from simulation.strategies.line_b_taejun.infra.orchestrator import Orchestrator
         orch = Orchestrator()
         assert orch.is_locked is False
 
     def test_profit_distributor_import(self):
-        from simulation.strategies.taejun_attach_pattern.profit_distributor import ProfitDistributor
+        from simulation.strategies.line_b_taejun.infra.profit_distributor import ProfitDistributor
         pd = ProfitDistributor()
         assert pd.sequence == ["SOXL", "ROBN", "GLD", "CONL"]
 
@@ -629,13 +644,13 @@ class TestMTVNQ3_SCHDSellBlock:
     """SCHD 매도 차단 테스트."""
 
     def test_schd_blocked_in_all_modes(self):
-        from simulation.strategies.taejun_attach_pattern.schd_master import SCHDMaster
+        from simulation.strategies.line_b_taejun.infra.schd_master import SCHDMaster
         for mode in ("M200", "M201", "emergency", "risk", "normal"):
             assert SCHDMaster.should_exclude_from_sell("SCHD", mode) is True, \
                 f"SCHD should be sell-blocked in {mode} mode"
 
     def test_non_schd_not_blocked(self):
-        from simulation.strategies.taejun_attach_pattern.schd_master import SCHDMaster
+        from simulation.strategies.line_b_taejun.infra.schd_master import SCHDMaster
         for ticker in ("SOXL", "CONL", "BITU"):
             assert SCHDMaster.should_exclude_from_sell(ticker, "M200") is False
 
@@ -644,7 +659,7 @@ class TestMTVNQ3_M28Gate:
     """M28 게이트 테스트."""
 
     def test_btc_primary_selection(self):
-        from simulation.strategies.taejun_attach_pattern.m28_poly_gate import M28PolyGate
+        from simulation.strategies.line_b_taejun.infra.m28_poly_gate import M28PolyGate
         gate = M28PolyGate()
         # Clear difference → A
         assert gate.select_btc_primary(1000, 500) == "A"
@@ -654,7 +669,7 @@ class TestMTVNQ3_M28Gate:
         assert gate.select_btc_primary(500, 505) == "B"
 
     def test_evaluate(self):
-        from simulation.strategies.taejun_attach_pattern.m28_poly_gate import M28PolyGate
+        from simulation.strategies.line_b_taejun.infra.m28_poly_gate import M28PolyGate
         gate = M28PolyGate()
         result = gate.evaluate({"btc_up": 0.63, "ndx_up": 0.45})
         assert result["btc_direction"] == "LONG"

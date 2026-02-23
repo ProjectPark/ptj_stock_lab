@@ -77,7 +77,7 @@ DEFAULT_ALLOCATIONS: dict[str, StrategyAllocation] = {
     "jab_soxl":         StrategyAllocation(max_pct=1.0, priority=3),
     "jab_bitu":         StrategyAllocation(max_pct=1.0, priority=3),
     "jab_tsll":         StrategyAllocation(max_pct=1.0, max_amount_usd=1500, priority=3),
-    "jab_seth":         StrategyAllocation(max_pct=1.0, priority=3),
+    "jab_etq":          StrategyAllocation(max_pct=1.0, priority=3),
 
     # 저가매수 (중간-낮음)
     "bargain_buy":      StrategyAllocation(max_pct=0.5, max_positions=3, priority=4),

@@ -12,7 +12,7 @@ if str(_ROOT / "fetchers") not in sys.path:
 
 import config
 import fetch_data
-from simulation.strategies import signals
+from simulation.strategies.line_a import signals
 import dashboard_html
 
 

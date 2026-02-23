@@ -128,11 +128,11 @@ class BargainBuy(BaseStrategy):
             return False
 
         current = market.prices.get(ticker, 0)
-        if current <= 0 or position.avg_price <= 0:
+        pnl = position.pnl_pct(current)
+        if pnl is None:
             return False
 
-        pnl_pct = (current - position.avg_price) / position.avg_price * 100
-        return pnl_pct <= cfg["add_drop"]
+        return pnl <= cfg["add_drop"]
 
     # ------------------------------------------------------------------
     # 청산 검토
@@ -146,10 +146,9 @@ class BargainBuy(BaseStrategy):
             return False
 
         current = market.prices.get(ticker, 0)
-        if current <= 0 or position.avg_price <= 0:
+        pnl_pct = position.pnl_pct(current)
+        if pnl_pct is None:
             return False
-
-        pnl_pct = (current - position.avg_price) / position.avg_price * 100
 
         # 보유 기한 초과 체크
         if cfg.get("hold_days", 0) > 0:
@@ -230,7 +229,7 @@ class BargainBuy(BaseStrategy):
         if current <= 0:
             return Signal(Action.HOLD, ticker, 0, 0, "no price data")
 
-        pnl_pct = (current - position.avg_price) / position.avg_price * 100
+        pnl_pct = position.pnl_pct(current) or 0.0
 
         # 추가매수 검토 (아직 stage 1이고 추가 하락시)
         if position.stage == 1 and self._check_ticker_add(ticker, market, position):

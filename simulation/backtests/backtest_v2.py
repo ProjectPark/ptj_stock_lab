@@ -30,7 +30,7 @@ import numpy as np
 import pandas as pd
 
 import config
-from simulation.strategies import signals_v2
+from simulation.strategies.line_a import signals_v2
 from simulation.backtests import backtest_common
 from simulation.backtests.backtest_base import BacktestBase
 

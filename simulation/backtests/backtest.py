@@ -19,7 +19,7 @@ import numpy as np
 import pandas as pd
 
 import config
-from simulation.strategies import signals
+from simulation.strategies.line_a import signals
 from simulation.backtests import backtest_common
 
 from fetchers.alpaca_fetcher import fetch_5min_v1, fetch_1min_v1, fetch_1min_v2

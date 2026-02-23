@@ -8,13 +8,14 @@
 """
 from __future__ import annotations
 
-from ..common.base import Action, BaseStrategy, ExitReason, MarketData, Position, Signal
+from ..common.base import Action, ExitReason, MarketData, Position, Signal
+from ..common.jab_base import JabBase
 from ..common.params import JAB_TSLL
 from ..common.registry import register
 
 
 @register
-class JabTSLL(BaseStrategy):
+class JabTSLL(JabBase):
     """잽모드 TSLL — TSLA 상승 + TSLL 과매도 역전 소액 단타."""
 
     name = "jab_tsll"
@@ -23,11 +24,6 @@ class JabTSLL(BaseStrategy):
 
     def __init__(self, params: dict | None = None):
         super().__init__(params or JAB_TSLL)
-
-    def _is_in_window(self, market: MarketData) -> bool:
-        start = self.params.get("entry_start_kst", (17, 30))
-        h, m = market.time.hour, market.time.minute
-        return (h, m) >= tuple(start)
 
     def check_entry(self, market: MarketData) -> bool:
         """모든 조건 ALL 충족.
@@ -66,33 +62,12 @@ class JabTSLL(BaseStrategy):
 
         return True
 
-    def check_exit(self, market: MarketData, position: Position) -> bool:
-        ticker = self.params.get("ticker", "TSLL")
-        current = market.prices.get(ticker, 0)
-        if current <= 0 or position.avg_price <= 0:
-            return False
-        pnl_pct = (current - position.avg_price) / position.avg_price * 100
-        return pnl_pct >= self.params["target_pct"]
-
     def generate_signal(self, market: MarketData,
                         position: Position | None = None) -> Signal:
         ticker = self.params.get("ticker", "TSLL")
 
         if position is not None:
-            current = market.prices.get(ticker, 0)
-            if current <= 0:
-                return Signal(Action.HOLD, ticker, 0, self.params["target_pct"],
-                             "no price data")
-            pnl_pct = (current - position.avg_price) / position.avg_price * 100
-            if pnl_pct >= self.params["target_pct"]:
-                return Signal(
-                    action=Action.SELL, ticker=ticker, size=1.0, target_pct=0,
-                    reason=f"jab_tsll target hit: {pnl_pct:.2f}% >= {self.params['target_pct']}%",
-                    exit_reason=ExitReason.TARGET_HIT,
-                    metadata={"pnl_pct": pnl_pct},
-                )
-            return Signal(Action.HOLD, ticker, 0, self.params["target_pct"],
-                         f"holding TSLL: pnl={pnl_pct:.2f}%")
+            return self._make_exit_signal(market, position, ticker)
 
         if not self.check_entry(market):
             return Signal(Action.SKIP, ticker, 0, 0, "conditions not met")

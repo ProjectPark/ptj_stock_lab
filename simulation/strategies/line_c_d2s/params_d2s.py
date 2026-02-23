@@ -49,8 +49,8 @@ D2S_ENGINE = {
     "atr_period": 14,
     "atr_high_quantile": 0.75,          # ATR Q4 → 진입 우대 (85.3%)
     "vol_avg_period": 20,
-    "vol_entry_min": 0.5,               # 거래량 하한 (콤보용)
-    "vol_entry_max": 1.5,               # 거래량 상한 (콤보용)
+    "vol_entry_min": 1.2,               # 거래량 하한 (91.2% 승률 구간, §4-6)
+    "vol_entry_max": 2.0,               # 거래량 상한 (91.2% 승률 구간, §4-6)
 
     # ── 4. 캘린더 (R15) ─────────────────────────────────────
     "friday_boost": True,                # 금요일 진입 우대 (88.3%)

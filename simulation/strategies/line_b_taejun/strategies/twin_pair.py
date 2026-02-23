@@ -30,6 +30,10 @@ class TwinPairStrategy(BaseStrategy):
     """쌍둥이 페어 갭 분석 — multi-follow + 매도 기준.
 
     v5: entry_threshold=2.2%, CONL/IRE 40/60 분할 매도 지원.
+
+    Note: 이 전략은 evaluate() 인터페이스를 사용합니다.
+    generate_signal()은 항상 SKIP을 반환하며,
+    composite_signal_engine에서 evaluate()를 직접 호출합니다.
     """
 
     name = "twin_pair"

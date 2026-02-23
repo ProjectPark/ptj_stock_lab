@@ -49,10 +49,10 @@ class BankConditional(BaseStrategy):
 
     def check_exit(self, market: MarketData, position: Position) -> bool:
         current = market.prices.get(position.ticker, 0)
-        if current <= 0 or position.avg_price <= 0:
+        pnl = position.pnl_pct(current)
+        if pnl is None:
             return False
-        pnl_pct = (current - position.avg_price) / position.avg_price * 100
-        return pnl_pct >= self.params["target_pct"]
+        return pnl >= self.params["target_pct"]
 
     def generate_signal(self, market: MarketData,
                         position: Position | None = None) -> Signal:
@@ -63,7 +63,7 @@ class BankConditional(BaseStrategy):
             if current <= 0:
                 return Signal(Action.HOLD, target, 0, self.params["target_pct"],
                              "no price data")
-            pnl_pct = (current - position.avg_price) / position.avg_price * 100
+            pnl_pct = position.pnl_pct(current) or 0.0
             if pnl_pct >= self.params["target_pct"]:
                 return Signal(
                     action=Action.SELL, ticker=target, size=1.0, target_pct=0,

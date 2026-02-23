@@ -8,13 +8,14 @@
 """
 from __future__ import annotations
 
-from ..common.base import Action, BaseStrategy, ExitReason, MarketData, Position, Signal
+from ..common.base import Action, ExitReason, MarketData, Position, Signal
+from ..common.jab_base import JabBase
 from ..common.params import JAB_BITU
 from ..common.registry import register
 
 
 @register
-class JabBITU(BaseStrategy):
+class JabBITU(JabBase):
     """잽모드 BITU — BTC 생태계 상승 + BITU 과매도 역전 단타."""
 
     name = "jab_bitu"
@@ -23,16 +24,6 @@ class JabBITU(BaseStrategy):
 
     def __init__(self, params: dict | None = None):
         super().__init__(params or JAB_BITU)
-
-    # ------------------------------------------------------------------
-    # 시간 조건
-    # ------------------------------------------------------------------
-
-    def _is_in_window(self, market: MarketData) -> bool:
-        """매매 가능 시간대인지 확인 (KST 기준)."""
-        start = self.params.get("entry_start_kst", (17, 30))
-        h, m = market.time.hour, market.time.minute
-        return (h, m) >= tuple(start)
 
     # ------------------------------------------------------------------
     # 진입 조건
@@ -80,20 +71,6 @@ class JabBITU(BaseStrategy):
         return True
 
     # ------------------------------------------------------------------
-    # 청산 조건
-    # ------------------------------------------------------------------
-
-    def check_exit(self, market: MarketData, position: Position) -> bool:
-        """목표 수익률 +0.9% 도달 여부."""
-        ticker = self.params.get("ticker", "BITU")
-        current = market.prices.get(ticker, 0)
-        if current <= 0 or position.avg_price <= 0:
-            return False
-
-        pnl_pct = (current - position.avg_price) / position.avg_price * 100
-        return pnl_pct >= self.params["target_pct"]
-
-    # ------------------------------------------------------------------
     # 시그널 생성
     # ------------------------------------------------------------------
 
@@ -136,26 +113,7 @@ class JabBITU(BaseStrategy):
     def _generate_exit_signal(self, market: MarketData,
                               position: Position, ticker: str) -> Signal:
         """청산 시그널."""
-        current = market.prices.get(ticker, 0)
-        if current <= 0:
-            return Signal(Action.HOLD, ticker, 0, self.params["target_pct"],
-                         "no price data")
-
-        pnl_pct = (current - position.avg_price) / position.avg_price * 100
-
-        if pnl_pct >= self.params["target_pct"]:
-            return Signal(
-                action=Action.SELL,
-                ticker=ticker,
-                size=1.0,  # 전액 매도
-                target_pct=0,
-                reason=f"jab_bitu target hit: {pnl_pct:.2f}% >= {self.params['target_pct']}%",
-                exit_reason=ExitReason.TARGET_HIT,
-                metadata={"pnl_pct": pnl_pct},
-            )
-
-        return Signal(Action.HOLD, ticker, 0, self.params["target_pct"],
-                      f"holding BITU: pnl={pnl_pct:.2f}%")
+        return self._make_exit_signal(market, position, ticker)
 
     # ------------------------------------------------------------------
     # 헬퍼

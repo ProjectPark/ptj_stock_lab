@@ -578,7 +578,7 @@ if __name__ == "__main__":
 
     chg = fetch_data.get_latest_changes(all_data)
 
-    import signals as sig_mod
+    from simulation.strategies.line_a import signals as sig_mod
     sigs = sig_mod.generate_all_signals(chg)
 
     path = generate_dashboard(all_data, chg, sigs)

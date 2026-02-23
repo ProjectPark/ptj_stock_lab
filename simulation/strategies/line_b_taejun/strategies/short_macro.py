@@ -45,10 +45,10 @@ class ShortMacro(BaseStrategy):
         """GDXU +90% 도달시 청산."""
         if position.ticker == "GDXU":
             current = market.prices.get("GDXU", 0)
-            if current <= 0 or position.avg_price <= 0:
+            pnl = position.pnl_pct(current)
+            if pnl is None:
                 return False
-            pnl_pct = (current - position.avg_price) / position.avg_price * 100
-            if pnl_pct >= self.params["action"]["gdxu_target_pct"]:
+            if pnl >= self.params["action"]["gdxu_target_pct"]:
                 return True
 
         return False
@@ -61,7 +61,7 @@ class ShortMacro(BaseStrategy):
             if current <= 0:
                 return Signal(Action.HOLD, "GDXU", 0, 0, "no price data")
 
-            pnl_pct = (current - position.avg_price) / position.avg_price * 100
+            pnl_pct = position.pnl_pct(current) or 0.0
 
             if self.check_exit(market, position):
                 return Signal(

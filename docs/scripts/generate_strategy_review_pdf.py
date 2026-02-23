@@ -12,7 +12,7 @@ from fpdf import FPDF
 
 # Paths
 ROOT = Path(__file__).resolve().parent.parent.parent
-MD_PATH = ROOT / "docs" / "notes" / "taejun_strategy_review_2026-02-23_VNQ.md"
+MD_PATH = ROOT / "docs" / "notes" / "line_b" / "review" / "taejun_strategy_review_2026-02-23_VNQ.md"
 PDF_DIR = ROOT / "docs" / "pdf"
 PDF_PATH = PDF_DIR / "taejun_strategy_review_2026-02-23_VNQ.pdf"
 

@@ -68,9 +68,12 @@ def to_wide_format(long_df: pd.DataFrame) -> pd.DataFrame:
     long format (symbol, timestamp, open, high, low, close, volume, ...)
     → wide format (DatetimeIndex, MultiIndex columns (ticker, OHLCV))
     """
-    # timestamp를 Date index로
+    # timestamp를 Date index로 (UTC timezone-aware → naive 변환 후 날짜 추출)
     long_df = long_df.copy()
-    long_df["Date"] = pd.to_datetime(long_df["timestamp"]).dt.normalize()
+    ts_col = pd.to_datetime(long_df["timestamp"])
+    if ts_col.dt.tz is not None:
+        ts_col = ts_col.dt.tz_convert("US/Eastern").dt.tz_localize(None)
+    long_df["Date"] = ts_col.dt.normalize()
     long_df = long_df.rename(columns={
         "open": "Open", "high": "High", "low": "Low",
         "close": "Close", "volume": "Volume",
@@ -91,7 +94,7 @@ def to_wide_format(long_df: pd.DataFrame) -> pd.DataFrame:
     # columns: (OHLCV, ticker) → (ticker, OHLCV) 순서로 swap
     wide.columns = pd.MultiIndex.from_tuples(
         [(ticker, ohlcv) for ohlcv, ticker in wide.columns],
-        names=[None, "Price"],
+        names=["Ticker", "Price"],
     )
     wide = wide.sort_index(axis=1, level=0)
     wide.index.name = "Date"

@@ -120,9 +120,48 @@ run-remote:
 #   make slurm-log PROFILE=backtest_v5               # 실행 중 로그 tail
 #   make slurm-clean                                 # 완료된 모든 run dir 정리
 
-PARTITION     ?= shared
+PARTITION     ?= all
+ACCOUNT       ?= default
 ARGS          ?=
 SLURM_POLL    ?= 30
+
+# ── Docker 이미지 설정 ──
+DOCKER_IMAGE  ?= ptj_stock_lab
+DOCKER_TAG    ?= latest
+SLURM_IMG_DIR  = $(REMOTE_DIR)/slurm/images
+SLURM_IMG_PATH = $(SLURM_IMG_DIR)/$(DOCKER_IMAGE).sqsh
+
+# ── slurm-image-build: 로컬에서 linux/amd64 이미지 빌드 (Docker Desktop 필요) ──
+slurm-image-build:
+	@echo ">>> [slurm-image-build] Building $(DOCKER_IMAGE):$(DOCKER_TAG) for linux/amd64 ..."
+	docker buildx build --platform linux/amd64 -t $(DOCKER_IMAGE):$(DOCKER_TAG) .
+	@echo ">>> [slurm-image-build] 완료."
+
+# ── slurm-image-push: 로컬 이미지 → 서버 전송 → enroot import (Docker Desktop 필요) ──
+slurm-image-push:
+	@echo ">>> [slurm-image-push] Saving image to /tmp/$(DOCKER_IMAGE).tar.gz ..."
+	docker save $(DOCKER_IMAGE):$(DOCKER_TAG) | gzip > /tmp/$(DOCKER_IMAGE).tar.gz
+	@echo ">>> [slurm-image-push] Uploading to server ..."
+	ssh $(REMOTE_HOST) "mkdir -p $(SLURM_IMG_DIR)"
+	rsync -avz --progress /tmp/$(DOCKER_IMAGE).tar.gz $(REMOTE)/slurm/images/$(DOCKER_IMAGE).tar.gz
+	@echo ">>> [slurm-image-push] Importing as enroot .sqsh on server ..."
+	ssh $(REMOTE_HOST) "enroot import --output $(SLURM_IMG_PATH) file:///$(SLURM_IMG_DIR)/$(DOCKER_IMAGE).tar.gz && rm $(SLURM_IMG_DIR)/$(DOCKER_IMAGE).tar.gz"
+	@echo ">>> [slurm-image-push] 완료: $(SLURM_IMG_PATH)"
+
+# ── slurm-image-setup: build + push 원스텝 (Docker Desktop 필요) ──
+slurm-image-setup: slurm-image-build slurm-image-push
+	@echo ">>> [slurm-image-setup] Docker 이미지 준비 완료."
+
+# ── slurm-image-refresh: 서버에서 직접 이미지 재빌드 (Docker Desktop 불필요) ──
+# enroot pull + pip install + export (패키지 업데이트 시 사용)
+slurm-image-refresh:
+	@echo ">>> [slurm-image-refresh] Pulling python:3.10-slim via enroot ..."
+	ssh $(REMOTE_HOST) "cd ~ && enroot import docker://python:3.10-slim"
+	@echo ">>> [slurm-image-refresh] Creating container and installing packages ..."
+	ssh $(REMOTE_HOST) "enroot delete ptj_stock_lab 2>/dev/null || true && enroot create --name ptj_stock_lab ~/python+3.10-slim.sqsh && enroot start --rw --root ptj_stock_lab -- pip install --no-cache-dir numpy pandas pyarrow optuna scipy matplotlib tqdm PyYAML python-dateutil pytz"
+	@echo ">>> [slurm-image-refresh] Exporting to $(SLURM_IMG_PATH) ..."
+	ssh $(REMOTE_HOST) "mkdir -p $(SLURM_IMG_DIR) && enroot export --output $(SLURM_IMG_PATH) ptj_stock_lab"
+	@echo ">>> [slurm-image-refresh] 완료: $(SLURM_IMG_PATH)"
 
 # ── slurm-setup: 서버 venv 생성 (초기 1회) ──
 slurm-setup:
@@ -156,16 +195,19 @@ slurm-submit:
 	@echo ">>> [slurm-submit] Profile: $(PROFILE)"
 	@. slurm/profiles/$(PROFILE).conf && \
 	  RUN_DIR=$$(cat slurm/jobs/$(PROFILE).rundir) && \
+	  _ARGS="$(ARGS)" && \
+	  EFFECTIVE_ARGS="$${_ARGS:-$$SCRIPT_ARGS}" && \
 	  sed \
 	    -e 's|{{PROFILE}}|$(PROFILE)|g' \
 	    -e "s|{{PARTITION}}|$(PARTITION)|g" \
+	    -e "s|{{ACCOUNT}}|$(ACCOUNT)|g" \
 	    -e "s|{{SBATCH_CPUS}}|$$SBATCH_CPUS|g" \
 	    -e "s|{{SBATCH_MEM}}|$$SBATCH_MEM|g" \
 	    -e "s|{{SBATCH_TIME}}|$$SBATCH_TIME|g" \
 	    -e "s|{{REMOTE_DIR}}|$(REMOTE_DIR)|g" \
 	    -e "s|{{RUN_DIR}}|$$RUN_DIR|g" \
 	    -e "s|{{SCRIPT}}|$$SCRIPT|g" \
-	    -e "s|{{SCRIPT_ARGS}}|$(ARGS)|g" \
+	    -e "s|{{SCRIPT_ARGS}}|$$EFFECTIVE_ARGS|g" \
 	    slurm/templates/default.sbatch > slurm/jobs/$(PROFILE).sbatch
 	@echo ">>> [slurm-submit] sbatch 파일 생성: slurm/jobs/$(PROFILE).sbatch"
 	@rsync -avz slurm/jobs/$(PROFILE).sbatch $(REMOTE)/slurm/jobs/
@@ -361,6 +403,7 @@ help:
 .PHONY: sync-code sync-data-push sync-data-pull sync-all sync-pull-all sync-dry \
         init-remote push remote-exec clean-remote-code clean-remote-results clean-remote \
         run-remote \
+        slurm-image-build slurm-image-push slurm-image-setup slurm-image-refresh \
         slurm-setup slurm-push slurm-submit slurm-watch slurm-log slurm-collect \
         slurm-status slurm-recover slurm-run slurm-full slurm-clean \
         mutagen-start mutagen-stop mutagen-status mutagen-pause mutagen-resume help

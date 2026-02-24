@@ -104,6 +104,184 @@ run-remote:
 	@echo ">>> 완료. 서버에 data/ 만 남아있습니다."
 
 # ══════════════════════════════════════════
+# SLURM Profile 기반 보안 실행 (Job별 격리)
+# ══════════════════════════════════════════
+#
+# 구조: runs/<profile>-<timestamp>/ 에 코드를 격리하여 동시 실행 안전
+#
+# Usage:
+#   make slurm-full PROFILE=backtest_v5              # 원스텝 (push→submit→wait→collect)
+#   make slurm-run  PROFILE=optimizer_v5             # 비동기 (push→submit)
+#   make slurm-run  PROFILE=backtest_v5 ARGS="--dry" # 스크립트 인자 전달
+#   make slurm-watch   PROFILE=optimizer_v5          # 완료 대기
+#   make slurm-collect PROFILE=optimizer_v5          # 결과 수집 + run dir 삭제
+#   make slurm-recover PROFILE=optimizer_v5          # 네트워크 끊김 후 복구
+#   make slurm-status                                # 내 전체 Job 목록
+#   make slurm-log PROFILE=backtest_v5               # 실행 중 로그 tail
+#   make slurm-clean                                 # 완료된 모든 run dir 정리
+
+PARTITION     ?= shared
+ARGS          ?=
+SLURM_POLL    ?= 30
+
+# ── slurm-setup: 서버 venv 생성 (초기 1회) ──
+slurm-setup:
+	@echo ">>> [slurm-setup] 서버에 venv 생성 중..."
+	rsync -avzR $(RSYNC_EXCLUDES) ./slurm/setup_env.sh $(REMOTE)/
+	ssh $(REMOTE_HOST) "bash $(REMOTE_DIR)/slurm/setup_env.sh"
+	@echo ">>> [slurm-setup] 완료."
+
+# ── slurm-push: Profile 기반 코드를 격리된 run dir에 push ──
+slurm-push:
+	@if [ -z "$(PROFILE)" ]; then echo "Usage: make slurm-push PROFILE=backtest_v5"; exit 1; fi
+	@if [ ! -f slurm/profiles/$(PROFILE).conf ]; then echo "Error: slurm/profiles/$(PROFILE).conf not found"; exit 1; fi
+	@echo ">>> [slurm-push] Profile: $(PROFILE)"
+	@. slurm/profiles/$(PROFILE).conf && \
+	  TIMESTAMP=$$(date +%Y%m%d-%H%M%S) && \
+	  RUN_DIR=$(REMOTE_DIR)/runs/$(PROFILE)-$$TIMESTAMP && \
+	  echo ">>> [slurm-push] Run dir: $$RUN_DIR" && \
+	  ssh $(REMOTE_HOST) "mkdir -p $$RUN_DIR $(REMOTE_DIR)/slurm/logs $(REMOTE_DIR)/slurm/jobs" && \
+	  for f in $$CODE_FILES; do \
+	    rsync -avzR $(RSYNC_EXCLUDES) ./$$f $(REMOTE_HOST):$$RUN_DIR/; \
+	  done && \
+	  ssh $(REMOTE_HOST) "ln -sfn $(REMOTE_DIR)/data $$RUN_DIR/data" && \
+	  echo "$$RUN_DIR" > slurm/jobs/$(PROFILE).rundir
+	@echo ">>> [slurm-push] 완료. 격리된 run dir에 코드 push됨."
+
+# ── slurm-submit: sbatch 생성 + 제출 (run dir 기반) ──
+slurm-submit:
+	@if [ -z "$(PROFILE)" ]; then echo "Usage: make slurm-submit PROFILE=backtest_v5"; exit 1; fi
+	@if [ ! -f slurm/profiles/$(PROFILE).conf ]; then echo "Error: slurm/profiles/$(PROFILE).conf not found"; exit 1; fi
+	@if [ ! -f slurm/jobs/$(PROFILE).rundir ]; then echo "Error: slurm/jobs/$(PROFILE).rundir not found. slurm-push 먼저 실행하세요."; exit 1; fi
+	@echo ">>> [slurm-submit] Profile: $(PROFILE)"
+	@. slurm/profiles/$(PROFILE).conf && \
+	  RUN_DIR=$$(cat slurm/jobs/$(PROFILE).rundir) && \
+	  sed \
+	    -e 's|{{PROFILE}}|$(PROFILE)|g' \
+	    -e "s|{{PARTITION}}|$(PARTITION)|g" \
+	    -e "s|{{SBATCH_CPUS}}|$$SBATCH_CPUS|g" \
+	    -e "s|{{SBATCH_MEM}}|$$SBATCH_MEM|g" \
+	    -e "s|{{SBATCH_TIME}}|$$SBATCH_TIME|g" \
+	    -e "s|{{REMOTE_DIR}}|$(REMOTE_DIR)|g" \
+	    -e "s|{{RUN_DIR}}|$$RUN_DIR|g" \
+	    -e "s|{{SCRIPT}}|$$SCRIPT|g" \
+	    -e "s|{{SCRIPT_ARGS}}|$(ARGS)|g" \
+	    slurm/templates/default.sbatch > slurm/jobs/$(PROFILE).sbatch
+	@echo ">>> [slurm-submit] sbatch 파일 생성: slurm/jobs/$(PROFILE).sbatch"
+	@rsync -avz slurm/jobs/$(PROFILE).sbatch $(REMOTE)/slurm/jobs/
+	@JOB_ID=$$(ssh $(REMOTE_HOST) "cd $(REMOTE_DIR) && sbatch slurm/jobs/$(PROFILE).sbatch" | grep -oE '[0-9]+') && \
+	  echo "$$JOB_ID" > slurm/jobs/$(PROFILE).jobid && \
+	  echo ">>> [slurm-submit] Job 제출 완료: $$JOB_ID"
+
+# ── slurm-watch: Job 완료 대기 (폴링, 네트워크 끊김 내성) ──
+slurm-watch:
+	@if [ -z "$(PROFILE)" ]; then echo "Usage: make slurm-watch PROFILE=backtest_v5"; exit 1; fi
+	@if [ ! -f slurm/jobs/$(PROFILE).jobid ]; then echo "Error: slurm/jobs/$(PROFILE).jobid not found. submit 먼저 실행하세요."; exit 1; fi
+	@JOB_ID=$$(cat slurm/jobs/$(PROFILE).jobid) && \
+	  echo ">>> [slurm-watch] Job $$JOB_ID 모니터링 시작 ($(SLURM_POLL)초 간격)..." && \
+	  while true; do \
+	    STATE=$$(ssh $(REMOTE_HOST) "squeue -j $$JOB_ID -h -o '%T'" 2>/dev/null) || { \
+	      echo ">>> [slurm-watch] 네트워크 오류. $(SLURM_POLL)초 후 재시도..."; \
+	      sleep $(SLURM_POLL); continue; \
+	    }; \
+	    if [ -z "$$STATE" ]; then \
+	      echo ">>> [slurm-watch] Job $$JOB_ID 완료."; break; \
+	    fi; \
+	    echo "  [$$(date +%H:%M:%S)] Job $$JOB_ID: $$STATE"; \
+	    sleep $(SLURM_POLL); \
+	  done
+
+# ── slurm-log: 실행 중 로그 tail ──
+slurm-log:
+	@if [ -z "$(PROFILE)" ]; then echo "Usage: make slurm-log PROFILE=backtest_v5"; exit 1; fi
+	@if [ ! -f slurm/jobs/$(PROFILE).jobid ]; then echo "Error: jobid not found"; exit 1; fi
+	@JOB_ID=$$(cat slurm/jobs/$(PROFILE).jobid) && \
+	  echo ">>> [slurm-log] Job $$JOB_ID stdout (Ctrl+C to stop):" && \
+	  ssh $(REMOTE_HOST) "tail -f $(REMOTE_DIR)/slurm/logs/$$JOB_ID.out" || true
+
+# ── slurm-collect: 결과 pull + run dir만 삭제 (다른 Job 영향 없음) ──
+slurm-collect:
+	@if [ -z "$(PROFILE)" ]; then echo "Usage: make slurm-collect PROFILE=backtest_v5"; exit 1; fi
+	@if [ ! -f slurm/profiles/$(PROFILE).conf ]; then echo "Error: profile not found"; exit 1; fi
+	@echo ">>> [slurm-collect] 결과 pull 중..."
+	@. slurm/profiles/$(PROFILE).conf && \
+	  for d in $$RESULTS_PULL; do \
+	    rsync -avz $(RSYNC_EXCLUDES) $(REMOTE)/$$d ./$$d; \
+	  done
+	@if [ -f slurm/jobs/$(PROFILE).jobid ]; then \
+	  JOB_ID=$$(cat slurm/jobs/$(PROFILE).jobid) && \
+	  echo ">>> [slurm-collect] 로그 pull 중..." && \
+	  rsync -avz $(REMOTE)/slurm/logs/$$JOB_ID.out ./slurm/logs/ 2>/dev/null || true && \
+	  rsync -avz $(REMOTE)/slurm/logs/$$JOB_ID.err ./slurm/logs/ 2>/dev/null || true; \
+	fi
+	@if [ -f slurm/jobs/$(PROFILE).rundir ]; then \
+	  RUN_DIR=$$(cat slurm/jobs/$(PROFILE).rundir) && \
+	  echo ">>> [slurm-collect] run dir 삭제: $$RUN_DIR" && \
+	  ssh $(REMOTE_HOST) "rm -rf $$RUN_DIR" && \
+	  rm -f slurm/jobs/$(PROFILE).rundir; \
+	fi
+	@echo ">>> [slurm-collect] 완료. 해당 run dir만 삭제됨 (다른 Job 영향 없음)."
+
+# ── slurm-status: 현재 내 Job 목록 ──
+slurm-status:
+	@echo ">>> [slurm-status] 서버 SLURM Job 목록:"
+	@ssh $(REMOTE_HOST) "squeue -u $$(whoami) -o '%.10i %.15j %.8T %.10M %.6D %R'" 2>/dev/null || \
+	  echo ">>> 서버 연결 실패. 네트워크를 확인하세요."
+	@echo ""
+	@echo ">>> [slurm-status] 로컬 저장된 Job:"
+	@for f in slurm/jobs/*.jobid; do \
+	  if [ -f "$$f" ]; then \
+	    PROF=$$(basename "$$f" .jobid); \
+	    RUNDIR=""; \
+	    if [ -f "slurm/jobs/$$PROF.rundir" ]; then RUNDIR=" -> $$(cat slurm/jobs/$$PROF.rundir)"; fi; \
+	    echo "  $$PROF: $$(cat $$f)$$RUNDIR"; \
+	  fi; \
+	done 2>/dev/null || echo "  (없음)"
+
+# ── slurm-recover: 네트워크 끊김 후 복구 (상태확인 → 완료시 collect) ──
+slurm-recover:
+	@if [ -z "$(PROFILE)" ]; then echo "Usage: make slurm-recover PROFILE=backtest_v5"; exit 1; fi
+	@if [ ! -f slurm/jobs/$(PROFILE).jobid ]; then echo "Error: jobid not found. 이전에 submit한 적이 없습니다."; exit 1; fi
+	@JOB_ID=$$(cat slurm/jobs/$(PROFILE).jobid) && \
+	  echo ">>> [slurm-recover] Job $$JOB_ID 상태 확인..." && \
+	  STATE=$$(ssh $(REMOTE_HOST) "squeue -j $$JOB_ID -h -o '%T'" 2>/dev/null) && \
+	  if [ -z "$$STATE" ]; then \
+	    echo ">>> [slurm-recover] Job $$JOB_ID 완료됨. 결과 수집 시작..." && \
+	    $(MAKE) slurm-collect PROFILE=$(PROFILE) --no-print-directory; \
+	  else \
+	    echo ">>> [slurm-recover] Job $$JOB_ID 아직 실행 중: $$STATE" && \
+	    echo ">>> slurm-watch로 대기하거나 나중에 다시 recover하세요."; \
+	  fi
+
+# ── slurm-run: push + submit (비동기) ──
+slurm-run:
+	@if [ -z "$(PROFILE)" ]; then echo "Usage: make slurm-run PROFILE=backtest_v5"; exit 1; fi
+	@$(MAKE) slurm-push PROFILE=$(PROFILE) --no-print-directory
+	@$(MAKE) slurm-submit PROFILE=$(PROFILE) PARTITION=$(PARTITION) ARGS="$(ARGS)" --no-print-directory
+	@echo ">>> [slurm-run] 비동기 제출 완료. slurm-watch 또는 slurm-recover로 모니터링하세요."
+
+# ── slurm-full: push + submit + wait + collect (동기, 원스텝) ──
+slurm-full:
+	@if [ -z "$(PROFILE)" ]; then echo "Usage: make slurm-full PROFILE=backtest_v5"; exit 1; fi
+	@echo "══════════════════════════════════════════"
+	@echo " SLURM Full Run: $(PROFILE)"
+	@echo "══════════════════════════════════════════"
+	@$(MAKE) slurm-push PROFILE=$(PROFILE) --no-print-directory
+	@$(MAKE) slurm-submit PROFILE=$(PROFILE) PARTITION=$(PARTITION) ARGS="$(ARGS)" --no-print-directory
+	@$(MAKE) slurm-watch PROFILE=$(PROFILE) --no-print-directory
+	@$(MAKE) slurm-collect PROFILE=$(PROFILE) --no-print-directory
+	@echo "══════════════════════════════════════════"
+	@echo " 완료. 결과가 로컬에 저장되었습니다."
+	@echo "══════════════════════════════════════════"
+
+# ── slurm-clean: 완료된 모든 run dir 정리 ──
+slurm-clean:
+	@echo ">>> [slurm-clean] 서버 runs/ 디렉토리 정리 중..."
+	@ssh $(REMOTE_HOST) "if ls -d $(REMOTE_DIR)/runs/*/ 2>/dev/null; then rm -rf $(REMOTE_DIR)/runs/*/; echo '>>> 삭제 완료.'; else echo '>>> runs/ 비어있음.'; fi"
+	@rm -f slurm/jobs/*.rundir
+	@echo ">>> [slurm-clean] 완료."
+
+# ══════════════════════════════════════════
 # mutagen 세션 관리
 # ══════════════════════════════════════════
 
@@ -159,6 +337,19 @@ help:
 	@echo "  make clean-remote       서버 전체 정리 (data/market 유지)"
 	@echo "  make run-remote SCRIPT=.. push→실행→pull→코드삭제 원스텝"
 	@echo ""
+	@echo "  [SLURM Profile 실행 — Job별 격리 (runs/)]"
+	@echo "  make slurm-setup                    서버 venv 생성 (초기 1회)"
+	@echo "  make slurm-full    PROFILE=name     원스텝: push→submit→wait→collect"
+	@echo "  make slurm-run     PROFILE=name     비동기: push→submit"
+	@echo "  make slurm-push    PROFILE=name     격리 run dir에 코드 push"
+	@echo "  make slurm-submit  PROFILE=name     sbatch 생성+제출"
+	@echo "  make slurm-watch   PROFILE=name     완료 대기 (폴링)"
+	@echo "  make slurm-log     PROFILE=name     실행 로그 tail"
+	@echo "  make slurm-collect PROFILE=name     결과 pull + run dir 삭제"
+	@echo "  make slurm-recover PROFILE=name     네트워크 끊김 후 복구"
+	@echo "  make slurm-status                   내 전체 Job 목록"
+	@echo "  make slurm-clean                    완료된 모든 run dir 정리"
+	@echo ""
 	@echo "  [실시간 동기화]"
 	@echo "  make mutagen-start      실시간 동기화 시작"
 	@echo "  make mutagen-stop       실시간 동기화 종료"
@@ -169,4 +360,7 @@ help:
 
 .PHONY: sync-code sync-data-push sync-data-pull sync-all sync-pull-all sync-dry \
         init-remote push remote-exec clean-remote-code clean-remote-results clean-remote \
-        run-remote mutagen-start mutagen-stop mutagen-status mutagen-pause mutagen-resume help
+        run-remote \
+        slurm-setup slurm-push slurm-submit slurm-watch slurm-log slurm-collect \
+        slurm-status slurm-recover slurm-run slurm-full slurm-clean \
+        mutagen-start mutagen-stop mutagen-status mutagen-pause mutagen-resume help

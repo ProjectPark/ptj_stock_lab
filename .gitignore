@@ -38,6 +38,12 @@ credentials.*
 # Logs
 *.log
 
+# SLURM generated
+slurm/jobs/*.sbatch
+slurm/jobs/*.jobid
+slurm/jobs/*.rundir
+slurm/logs/
+
 # Generated
 docs/**/*.pdf
 docs/charts/

@@ -223,6 +223,41 @@ def extract_metrics_usd(engine: Any) -> TrialResult:
 
 
 # ============================================================
+# 병렬 worker 함수 (top-level: multiprocessing.Pool 호환)
+# ============================================================
+
+
+def _parallel_worker_run(cfg: dict) -> None:
+    """병렬 worker 프로세스 진입점 (spawn Pool 호환, top-level 필수).
+
+    각 worker는 독립 프로세스에서 SQLite storage를 통해
+    trial 결과를 공유하며 study.optimize()를 실행한다.
+    """
+    import importlib
+
+    import optuna
+    from optuna.samplers import TPESampler
+
+    # spawn 프로세스에서 optimizer 재생성
+    module = importlib.import_module(cfg["optimizer_module"])
+    cls = getattr(module, cfg["optimizer_class"])
+    opt = cls(**cfg.get("init_kwargs", {}))
+
+    study = optuna.load_study(
+        study_name=cfg["study_name"],
+        storage=cfg["storage"],
+        sampler=TPESampler(seed=cfg["seed"]),
+    )
+    objective = opt._make_objective(**cfg.get("obj_kwargs", {}))
+    study.optimize(
+        objective,
+        n_trials=cfg["n_trials"],
+        timeout=cfg.get("timeout"),
+        show_progress_bar=False,
+    )
+
+
+# ============================================================
 # BaseOptimizer ABC
 # ============================================================
 
@@ -266,6 +301,14 @@ class BaseOptimizer(ABC):
         """Optuna 탐색 공간을 정의하고 params dict를 반환."""
 
     # ── 서브클래스 선택 오버라이드 ─────────────────────────────
+
+    def get_init_kwargs(self) -> dict:
+        """worker 프로세스에서 optimizer를 재생성할 때 사용할 __init__ kwargs.
+
+        __init__ 인자가 있는 서브클래스는 반드시 오버라이드해야 한다.
+        예) V5Optimizer: {"gap_max": self.gap_max}
+        """
+        return {}
 
     def calc_score(self, result: TrialResult) -> float:
         """최적화 스코어를 계산한다. 기본: total_return_pct."""
@@ -442,20 +485,32 @@ class BaseOptimizer(ABC):
         if remaining <= 0:
             print(f"  목표 trial {n_trials}회 이미 완료됨 (완료: {already_done}회)")
         elif n_jobs > 1:
+            if not db:
+                raise ValueError(
+                    "병렬 실행(n_jobs > 1)에는 SQLite 스토리지 필요:\n"
+                    "  --db sqlite:///data/optuna/v5_opt.db"
+                )
             import multiprocessing as mp
             ctx = mp.get_context("spawn")
+            trials_per_worker, remainder = divmod(remaining, n_jobs)
+            worker_cfgs = [
+                {
+                    "optimizer_class": type(self).__name__,
+                    "optimizer_module": type(self).__module__,
+                    "init_kwargs": self.get_init_kwargs(),
+                    "study_name": study_name,
+                    "storage": db,
+                    "n_trials": trials_per_worker + (1 if i < remainder else 0),
+                    "timeout": timeout,
+                    "seed": 42 + i,
+                    "obj_kwargs": obj_kwargs,
+                }
+                for i in range(n_jobs)
+            ]
+            print(f"  {n_jobs} workers × ~{trials_per_worker} trials/worker 병렬 실행...")
             with ctx.Pool(processes=n_jobs) as pool:
-                self._pool = pool
-                study.optimize(
-                    objective,
-                    n_trials=remaining,
-                    timeout=timeout,
-                    show_progress_bar=True,
-                    callbacks=callbacks or None,
-                )
-                self._pool = None
+                pool.map(_parallel_worker_run, worker_cfgs)
         else:
-            self._pool = None
             study.optimize(
                 objective,
                 n_trials=remaining,

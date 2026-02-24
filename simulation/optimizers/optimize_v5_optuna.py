@@ -78,6 +78,9 @@ class V5Optimizer(BaseOptimizer):
         from simulation.backtests.backtest_v5 import BacktestEngineV5
         return BacktestEngineV5(**kwargs)
 
+    def get_init_kwargs(self) -> dict:
+        return {"gap_max": self.gap_max}
+
     def define_search_space(self, trial: optuna.Trial) -> dict:
         """v5 Optuna 탐색 공간을 정의한다."""
         params = {
@@ -116,16 +119,6 @@ class V5Optimizer(BaseOptimizer):
             "PAIR_SELL_FIRST_PCT": trial.suggest_float("PAIR_SELL_FIRST_PCT", 0.5, 1.0, step=0.05),
         }
         return params
-
-
-# ── 워커 함수 (mp.Pool 호환) ──────────────────────────────────
-
-
-def _worker(params: dict) -> dict:
-    """mp.Pool에서 호출되는 최상위 함수."""
-    opt = V5Optimizer()
-    result = opt.run_single_trial(params)
-    return result.to_dict()
 
 
 # ── 메인 ──────────────────────────────────────────────────────

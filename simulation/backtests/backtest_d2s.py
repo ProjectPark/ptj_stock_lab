@@ -123,6 +123,7 @@ class D2SBacktest:
         tech: dict[str, pd.DataFrame],
         poly: dict,
         spy_streak: int,
+        riskoff_streak: int = 0,
     ) -> DailySnapshot | None:
         """특정 날짜의 DailySnapshot을 빌드한다."""
         snap = DailySnapshot(
@@ -179,6 +180,7 @@ class D2SBacktest:
             snap.poly_btc_up = poly_day["btc_up"]
 
         snap.spy_streak = spy_streak
+        snap.riskoff_streak = riskoff_streak
 
         return snap
 
@@ -290,11 +292,12 @@ class D2SBacktest:
             print(f"  초기 자본: ${self.initial_capital:,.0f}")
             print()
 
-        # SPY 연속 상승 추적
+        # SPY 연속 상승 / riskoff 연속 추적
         spy_streak = 0
+        riskoff_streak = 0
 
         for i, td in enumerate(trading_dates):
-            snap = self._build_snapshot(td, tech, poly, spy_streak)
+            snap = self._build_snapshot(td, tech, poly, spy_streak, riskoff_streak)
             if snap is None:
                 continue
 
@@ -313,13 +316,26 @@ class D2SBacktest:
                         sig["ticker"], sig["size"], snap, sig["reason"],
                     )
 
+            # 당일 신규 진입 총합 cap 추적 (§12-3: ≤ 자본 30%)
+            daily_entry_cap = self.params.get("daily_new_entry_cap", 1.0)
+            daily_entry_used = 0.0
+            capital_for_cap = self.cash + sum(
+                snap.closes.get(t, pos.entry_price) * pos.qty
+                for t, pos in self.positions.items()
+            )
+
             for sig in signals:
                 if sig["action"] == "BUY":
+                    # cap 초과 시 진입 건너뜀
+                    entry_fraction = sig["size"]
+                    if daily_entry_used + entry_fraction > daily_entry_cap:
+                        continue
                     trade = self._execute_buy(
                         sig["ticker"], sig["size"], snap,
                         sig["reason"], sig.get("score", 0),
                     )
                     if trade:
+                        daily_entry_used += entry_fraction
                         daily_buy_counts[sig["ticker"]] = (
                             daily_buy_counts.get(sig["ticker"], 0) + 1
                         )
@@ -330,6 +346,13 @@ class D2SBacktest:
                 spy_streak += 1
             else:
                 spy_streak = 0
+
+            # riskoff_streak 업데이트 (Study A: GLD↑+SPY↓ 연속일)
+            gld_pct = snap.changes.get("GLD", 0)
+            if gld_pct > 0 and spy_pct < 0:
+                riskoff_streak += 1
+            else:
+                riskoff_streak = 0
 
             # 자산 스냅샷
             equity = self.cash + sum(

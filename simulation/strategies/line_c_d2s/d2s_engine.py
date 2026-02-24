@@ -4,6 +4,11 @@ D2S 엔진 — 실거래 행동 추출 기반 일봉 전략
 trading_rules_attach_v1.md의 16개 규칙(R1~R16)을 구현.
 953건 실거래 D2S(Discretionary-to-Systematic) 분석에서 추출.
 
+2026-02-24: Study A/B/C 반영
+  - Study A: R14 그라데이션 (4단계: panic/basic/optimal/super)
+  - Study B: 종목별 역발상 차별화 (MSTU/ROBN/CONL/AMDL)
+  - Study C: market_score 0차 게이트 (6개 시황 신호 통합)
+
 일봉(daily) 단위로 작동하며, 기술적 지표(RSI, MACD, BB, ATR)를
 직접 계산한다 (외부 TA 라이브러리 의존 없음).
 """
@@ -107,8 +112,9 @@ class DailySnapshot:
     # 시황
     poly_btc_up: float | None = None
     confidence_signal: bool = False
-    spy_streak: int = 0  # SPY 연속 상승일 수
-    weekday: int = 0  # 0=Mon, 4=Fri
+    spy_streak: int = 0       # SPY 연속 상승일 수
+    riskoff_streak: int = 0   # Study A: 연속 리스크오프(GLD↑+SPY↓) 일수
+    weekday: int = 0           # 0=Mon, 4=Fri
 
 
 @dataclass
@@ -143,49 +149,169 @@ class D2SEngine:
         self._weights = self.p["ticker_weights"]
 
     # ------------------------------------------------------------------
-    # 1차 게이트: 시황 필터 (R1, R3, R13, R14)
+    # 0차 게이트: market_score 계산 (Study C, §1-8)
+    # ------------------------------------------------------------------
+
+    def compute_market_score(self, snap: DailySnapshot) -> float:
+        """6개 시황 신호를 0~1 통합 점수로 합산한다.
+
+        Returns
+        -------
+        float
+            0.0 (최악) ~ 1.0 (최적)
+        """
+        gld_pct = snap.changes.get("GLD", 0.0)
+        spy_pct = snap.changes.get("SPY", 0.0)
+
+        # gld_score: GLD 등락률 기반 (R1). -2%~+2% 범위 정규화
+        gld_raw = float(np.clip(gld_pct / 2.0, -1.0, 1.0))
+        gld_score = (gld_raw + 1.0) / 2.0  # 0~1
+
+        # spy_score: SPY 등락률 기반 (R6). -2%~+2% 범위 정규화
+        spy_raw = float(np.clip(spy_pct / 2.0, -1.0, 1.0))
+        spy_score = (spy_raw + 1.0) / 2.0  # 0~1
+
+        # riskoff_score: GLD↑+SPY↓ 발동 여부 (R14 기반)
+        riskoff = gld_pct > 0 and spy_pct < 0
+        spy_min_th = self.p.get("riskoff_spy_min_threshold", -1.5)
+        riskoff_valid = riskoff and spy_pct >= spy_min_th  # 패닉 구간 제외
+        riskoff_score = 0.0
+        if riskoff_valid:
+            riskoff_score = 0.8  # 기본 발동
+            # 최적 구간 추가 가점
+            if (gld_pct >= self.p.get("riskoff_gld_optimal_min", 0.5)
+                    and spy_pct <= self.p.get("riskoff_spy_optimal_max", -0.5)):
+                riskoff_score = 1.0
+
+        # streak_score: SPY 연속 상승이 낮을수록 좋음 (R13 기반)
+        streak_max = self.p.get("spy_streak_max", 3)
+        streak_score = max(0.0, 1.0 - snap.spy_streak / max(streak_max, 1))
+
+        # vol_score: 평균 상대 거래량 (R16 기반, 유일 유의 p=0.041)
+        vols = [v for v in snap.rel_volume.values() if v > 0 and not np.isnan(v)]
+        if vols:
+            avg_vol = float(np.mean(vols))
+            # 1.2~2.0x 구간 최적 → 0~1 정규화
+            vol_score = float(np.clip((avg_vol - 0.5) / 2.0, 0.0, 1.0))
+        else:
+            vol_score = 0.5
+
+        # btc_score: BTC 확률 (R3 대용, BITU 등락률 기반)
+        btc_up = snap.poly_btc_up
+        btc_min = self.p.get("btc_up_min", 0.40)
+        btc_max = self.p.get("btc_up_max", 0.75)
+        if btc_up is not None:
+            if btc_min <= btc_up <= btc_max:
+                btc_score = 1.0  # 적정 구간
+            elif btc_up < btc_min:
+                btc_score = 0.2  # 너무 낮음
+            else:
+                btc_score = 0.2  # 너무 높음 (억제 구간)
+        else:
+            btc_score = 0.5  # 데이터 없으면 중립
+
+        # 가중 합산
+        w = self.p.get("market_score_weights", {
+            "gld_score": 0.20, "spy_score": 0.15, "riskoff_score": 0.25,
+            "streak_score": 0.15, "vol_score": 0.15, "btc_score": 0.10,
+        })
+        score = (
+            w.get("gld_score", 0.20) * gld_score
+            + w.get("spy_score", 0.15) * spy_score
+            + w.get("riskoff_score", 0.25) * riskoff_score
+            + w.get("streak_score", 0.15) * streak_score
+            + w.get("vol_score", 0.15) * vol_score
+            + w.get("btc_score", 0.10) * btc_score
+        )
+
+        # riskoff_streak 연속 특급 보너스 (Study A §1-5)
+        if snap.riskoff_streak >= self.p.get("riskoff_consecutive_boost", 3):
+            score = min(score + 0.10, 1.0)
+
+        return round(float(score), 4)
+
+    # ------------------------------------------------------------------
+    # 1차 게이트: 시황 필터 (R1, R3, R13, R14) — Study A 반영
     # ------------------------------------------------------------------
 
     def check_market_filter(self, snap: DailySnapshot) -> dict[str, Any]:
         """시황 필터를 평가하고 결과를 반환한다.
 
+        R14(GLD↑+SPY↓)가 발동하면 R1/R3/R13을 오버라이드한다 (최우선).
+        SPY < -1.5% 패닉 구간에서는 R14 미발동이나 비중 50% 축소.
+
         Returns
         -------
         dict
-            blocked: bool, reason: str, riskoff_boost: bool, spy_bearish: bool
+            blocked, reason, riskoff_boost, riskoff_optimal, riskoff_super,
+            riskoff_panic, spy_bearish, size_factor
         """
         gld_pct = snap.changes.get("GLD", 0.0)
         spy_pct = snap.changes.get("SPY", 0.0)
+        spy_min_th = self.p.get("riskoff_spy_min_threshold", -1.5)
+
+        _base = {
+            "blocked": False, "reason": "",
+            "riskoff_boost": False, "riskoff_optimal": False,
+            "riskoff_super": False, "riskoff_panic": False,
+            "spy_bearish": False, "size_factor": 1.0,
+        }
+
+        # ── R14 최우선 판단 ─────────────────────────────────────
+        riskoff_gld_up_spy_down = (
+            self.p.get("riskoff_gld_up_spy_down", True)
+            and gld_pct > 0 and spy_pct < 0
+        )
+
+        if riskoff_gld_up_spy_down:
+            # 패닉 구간: SPY < -1.5% → R14 미발동, 비중 50% 축소
+            if spy_pct < spy_min_th:
+                return {**_base,
+                        "riskoff_panic": True,
+                        "size_factor": self.p.get("riskoff_panic_size_factor", 0.5)}
+
+            # R14 발동 → R1/R3/R13 오버라이드
+            riskoff_optimal = (
+                gld_pct >= self.p.get("riskoff_gld_optimal_min", 0.5)
+                and spy_pct <= self.p.get("riskoff_spy_optimal_max", -0.5)
+            )
+            riskoff_super = (
+                snap.riskoff_streak >= self.p.get("riskoff_consecutive_boost", 3)
+            )
+            return {**_base,
+                    "riskoff_boost": True,
+                    "riskoff_optimal": riskoff_optimal,
+                    "riskoff_super": riskoff_super}
+
+        # ── R14 미발동 시 → R1/R3/R13 순서대로 체크 ────────────
 
         # R1: GLD 매수 억제
         if gld_pct >= self.p["gld_suppress_threshold"]:
-            return {"blocked": True, "reason": f"R1: GLD {gld_pct:+.2f}% >= {self.p['gld_suppress_threshold']}%",
-                    "riskoff_boost": False, "spy_bearish": False}
+            return {**_base, "blocked": True,
+                    "reason": f"R1: GLD {gld_pct:+.2f}% >= {self.p['gld_suppress_threshold']}%"}
 
-        # R3: BTC 확률 억제
+        # R3: BTC 확률 억제 (상한)
         if snap.poly_btc_up is not None and snap.poly_btc_up > self.p["btc_up_max"]:
-            return {"blocked": True, "reason": f"R3: BTC_up {snap.poly_btc_up:.2f} > {self.p['btc_up_max']}",
-                    "riskoff_boost": False, "spy_bearish": False}
+            return {**_base, "blocked": True,
+                    "reason": f"R3: BTC_up {snap.poly_btc_up:.2f} > {self.p['btc_up_max']}"}
+
+        # R3: BTC 확률 억제 (하한)
+        if snap.poly_btc_up is not None and snap.poly_btc_up < self.p.get("btc_up_min", 0.40):
+            return {**_base, "blocked": True,
+                    "reason": f"R3: BTC_up {snap.poly_btc_up:.2f} < {self.p.get('btc_up_min', 0.40)}"}
 
         # confidence_signal 억제
         if self.p["confidence_suppress"] and snap.confidence_signal:
-            return {"blocked": True, "reason": "R: confidence_signal active",
-                    "riskoff_boost": False, "spy_bearish": False}
+            return {**_base, "blocked": True, "reason": "R: confidence_signal active"}
 
         # R13: SPY 연속 상승 매수 금지
         if snap.spy_streak >= self.p["spy_streak_max"]:
-            return {"blocked": True, "reason": f"R13: SPY streak {snap.spy_streak} >= {self.p['spy_streak_max']}",
-                    "riskoff_boost": False, "spy_bearish": False}
-
-        # R14: GLD↑+SPY↓ 리스크오프 적극 매수
-        riskoff = (self.p["riskoff_gld_up_spy_down"]
-                   and gld_pct > 0 and spy_pct < 0)
+            return {**_base, "blocked": True,
+                    "reason": f"R13: SPY streak {snap.spy_streak} >= {self.p['spy_streak_max']}"}
 
         # R6: SPY 하락장 역발상
         spy_bearish = spy_pct <= self.p["spy_bearish_threshold"]
-
-        return {"blocked": False, "reason": "",
-                "riskoff_boost": riskoff, "spy_bearish": spy_bearish}
+        return {**_base, "spy_bearish": spy_bearish}
 
     # ------------------------------------------------------------------
     # 2차 게이트: 쌍둥이 갭 + OOS 규칙 (R2)
@@ -249,7 +375,7 @@ class D2SEngine:
             return {"blocked": True, "reason": f"R8: BB%B {bb:.2f} > {self.p['bb_danger_zone']}",
                     "combo_optimal": False, "atr_boost": False}
 
-        # R9: MACD 콤보 최적 (MACD bullish + RSI 40~60 + Vol 0.5~1.5x)
+        # R9: MACD 콤보 최적 (MACD bullish + RSI 40~60 + Vol 1.2~2.0x)
         rsi_in_range = (rsi is not None
                         and self.p["rsi_entry_min"] <= rsi <= self.p["rsi_entry_max"])
         vol_normal = (self.p["vol_entry_min"] <= rel_vol <= self.p["vol_entry_max"])
@@ -262,7 +388,7 @@ class D2SEngine:
                 "combo_optimal": combo_optimal, "atr_boost": atr_boost}
 
     # ------------------------------------------------------------------
-    # 4차 게이트: 캘린더 + 역발상 (R15, R6)
+    # 4차 게이트: 캘린더 + 역발상 + 종목별 차별화 (Study B, R15, R6)
     # ------------------------------------------------------------------
 
     def check_entry_quality(
@@ -271,23 +397,69 @@ class D2SEngine:
     ) -> dict[str, Any]:
         """진입 품질 점수를 계산한다.
 
+        Study B: 종목별 역발상 × R14 교차 차별화 반영.
+          - MSTU: R14 발동 시 역발상만 허용 (순발상 절대 금지)
+          - ROBN: R14 발동 + 순발상 → 우대 (68.8%)
+          - CONL: R14 없이 역발상 금지
+          - AMDL: 금요일 + 역발상 -1.5% 이하 특화
+
         Returns
         -------
         dict
-            score: float (0~1), size_hint: str ("large"|"small"), reasons: list[str]
+            score: float (0~1), size_hint: str ("large"|"small"|"skip"),
+            reasons: list[str]
         """
         score = 0.5  # 기저
-        reasons = []
+        reasons: list[str] = []
         ticker_pct = snap.changes.get(ticker, 0.0)
+        riskoff = market_ctx.get("riskoff_boost", False)
+        is_friday = snap.weekday == 4
+        is_contrarian = ticker_pct < self.p["contrarian_entry_threshold"]  # 기본: 0.0
 
-        # R14: 리스크오프 부스트
-        if market_ctx.get("riskoff_boost"):
-            score += 0.2
-            reasons.append("R14:riskoff_boost")
+        # ── Study B: 종목별 역발상 × R14 차별화 ─────────────────
+
+        # MSTU: R14 발동 시 역발상만 허용 (순발상 = 절대 금지, 25% 승률)
+        if ticker == "MSTU" and riskoff and self.p.get("mstu_riskoff_contrarian_only", True):
+            if not is_contrarian:
+                return {"score": 0.0, "size_hint": "skip",
+                        "reasons": ["MSTU:riskoff+momentum=BLOCKED(25%)"]}
+            score += 0.10
+            reasons.append("MSTU:riskoff+contrarian")
+
+        # ROBN: R14 발동 + 순발상(모멘텀) → 우대 (68.8%)
+        elif ticker == "ROBN" and riskoff and not is_contrarian:
+            if self.p.get("robn_riskoff_momentum_boost", True):
+                score += 0.20
+                reasons.append("ROBN:riskoff+momentum_boost(68.8%)")
+
+        # CONL: R14 없이 역발상 효과 없음 (46.7%) → R14 없으면 역발상 진입 금지
+        elif ticker == "CONL":
+            if self.p.get("conl_contrarian_require_riskoff", True):
+                if not riskoff and is_contrarian:
+                    return {"score": 0.0, "size_hint": "skip",
+                            "reasons": ["CONL:contrarian_without_riskoff=BLOCKED(46.7%)"]}
+
+        # AMDL: 금요일 + 역발상 -1.5% 이하 특화 (66.7%)
+        if ticker == "AMDL" and is_friday:
+            amdl_th = self.p.get("amdl_friday_contrarian_threshold", -1.5)
+            if ticker_pct <= amdl_th:
+                score += 0.15
+                reasons.append(f"AMDL:friday+contrarian({ticker_pct:+.1f}%<={amdl_th}%)")
+
+        # ── R14: 리스크오프 강도별 부스트 (Study A) ──────────────
+        if market_ctx.get("riskoff_super"):
+            score += 0.30
+            reasons.append("R14:riskoff_super(100%)")
+        elif market_ctx.get("riskoff_optimal"):
+            score += 0.20
+            reasons.append("R14:riskoff_optimal(72.7%)")
+        elif riskoff:
+            score += 0.10
+            reasons.append("R14:riskoff_basic")
 
         # R6: SPY 하락 역발상
         if market_ctx.get("spy_bearish"):
-            score += 0.1
+            score += 0.10
             reasons.append("R6:spy_bearish")
 
         # R9: 콤보 최적
@@ -301,13 +473,13 @@ class D2SEngine:
             reasons.append("R16:atr_boost")
 
         # R15: 금요일 부스트
-        if self.p["friday_boost"] and snap.weekday == 4:
+        if self.p["friday_boost"] and is_friday:
             score += 0.05
             reasons.append("R15:friday")
 
         # 역발상 진입 (종목 하락 시 우대)
-        if ticker_pct < self.p["contrarian_entry_threshold"]:
-            score += 0.1
+        if is_contrarian:
+            score += 0.10
             reasons.append(f"contrarian:{ticker_pct:+.1f}%")
 
         # BB 하단 우대
@@ -379,7 +551,7 @@ class D2SEngine:
         Returns
         -------
         list[dict]
-            각 시그널: action, ticker, size, reason, score, ...
+            각 시그널: action, ticker, size, reason, score, market_score
         """
         signals = []
 
@@ -393,21 +565,40 @@ class D2SEngine:
                     "size": 1.0,
                     "reason": exit_ctx["reason"],
                     "score": 0,
+                    "market_score": 0,
                 })
 
-        # === 시황 필터 ===
+        # === 0차 게이트: market_score (Study C, §13-0) ===
+        market_score = self.compute_market_score(snap)
+        suppress_th = self.p.get("market_score_suppress", 0.40)
+        if market_score < suppress_th:
+            return signals  # 당일 진입 전면 억제
+
+        # A/B 등급: 진입 비중 조정에 활용
+        entry_a_th = self.p.get("market_score_entry_a", 0.60)
+        entry_b_th = self.p.get("market_score_entry_b", 0.55)
+        score_grade = "A" if market_score >= entry_a_th else "B"
+
+        # === 1차 게이트: 시황 필터 (R1, R3, R13, R14) ===
         market_ctx = self.check_market_filter(snap)
+        market_ctx["market_score"] = market_score
+        market_ctx["score_grade"] = score_grade
+
         if market_ctx["blocked"]:
             return signals  # 매도만 반환
+
+        # 패닉 구간 비중 축소 계수
+        size_factor = market_ctx.get("size_factor", 1.0)
+        # B등급이면 추가 비중 축소 없음 (A등급과 동일 취급)
 
         # === 쌍둥이 갭 진입 후보 ===
         gap_candidates = self.check_twin_gaps(snap)
 
         # === 각 후보 종목에 대해 기술적/품질 필터 ===
         buy_candidates = []
+        seen_tickers: set[str] = set()
 
         # 갭 기반 후보
-        seen_tickers = set()
         for gc in gap_candidates:
             ticker = gc["follow"]
             if ticker in seen_tickers:
@@ -423,6 +614,9 @@ class D2SEngine:
                 continue
 
             quality = self.check_entry_quality(ticker, snap, market_ctx, tech_ctx)
+            if quality["size_hint"] == "skip":
+                continue
+
             buy_candidates.append({
                 "ticker": ticker,
                 "source": f"gap:{gc['pair']}({gc['gap']:+.2f}%)",
@@ -445,6 +639,8 @@ class D2SEngine:
             if tech_ctx["blocked"]:
                 continue
             quality = self.check_entry_quality(ticker, snap, market_ctx, tech_ctx)
+            if quality["size_hint"] == "skip":
+                continue
             # 단독 진입은 콤보 최적 또는 리스크오프일 때만
             if quality["score"] >= 0.65:
                 seen_tickers.add(ticker)
@@ -467,6 +663,8 @@ class D2SEngine:
                 if tech_ctx["blocked"]:
                     continue
                 quality = self.check_entry_quality(ticker, snap, market_ctx, tech_ctx)
+                if quality["size_hint"] == "skip":
+                    continue
                 if quality["score"] >= 0.6:
                     buy_candidates.append({
                         "ticker": ticker,
@@ -479,15 +677,17 @@ class D2SEngine:
         # 점수 순 정렬, 상위 3개만
         buy_candidates.sort(key=lambda x: x["score"], reverse=True)
         for cand in buy_candidates[:3]:
-            size = (self.p["buy_size_large"]
-                    if cand["size_hint"] == "large"
-                    else self.p["buy_size_small"])
+            base_size = (self.p["buy_size_large"]
+                         if cand["size_hint"] == "large"
+                         else self.p["buy_size_small"])
+            size = round(base_size * size_factor, 4)
             signals.append({
                 "action": "BUY",
                 "ticker": cand["ticker"],
                 "size": size,
                 "reason": f"{cand['source']} | {', '.join(cand['reasons'])}",
                 "score": cand["score"],
+                "market_score": market_score,
             })
 
         return signals

@@ -153,7 +153,7 @@ DATE_FULL_END   = date(2026, 2, 17)
 DATE_IS_END     = date(2025, 9, 30)
 DATE_OOS_START  = date(2025, 10, 1)
 
-N_JOBS = int(os.environ.get("N_JOBS", "8"))
+N_JOBS = int(os.environ.get("N_JOBS", "20"))
 
 
 def _run_task(args: tuple) -> dict:

@@ -5,9 +5,14 @@ D2S Optuna 파라미터 최적화
 Study A/B/C 반영 D2S 엔진(trading_rules_attach_v1.md)의 파라미터를
 Optuna TPE 샘플러로 최적화한다.
 
-병렬 전략:
-  - SQLite DB 공유 → 20개 프로세스가 동시에 trial 실행
+병렬 전략 (v2 수정):
+  - JournalStorage(JournalFileBackend) 사용 → 다중 프로세스 lock-free 쓰기
+  - SQLite 대비 20 workers 동시 쓰기 충돌 없음
   - SLURM 20 CPU 할당 시 --n-jobs 20 으로 20 trial 동시 진행
+
+스코어 함수 (v2 수정):
+  - 구: win_rate×0.50 + return×0.30 - mdd×0.20  (return 지배 문제)
+  - 신: win_rate×0.40 + sharpe×15  - mdd×0.30   (리스크 조정 수익률 우선)
 
 Usage:
     # Stage 1: baseline 측정 (IS 구간)
@@ -39,6 +44,8 @@ if str(_PROJECT_ROOT) not in sys.path:
 
 import optuna
 from optuna.samplers import TPESampler
+from optuna.storages import JournalStorage
+from optuna.storages.journal import JournalFileBackend
 
 from simulation.strategies.line_c_d2s.params_d2s import D2S_ENGINE
 
@@ -57,19 +64,21 @@ RESULTS_DIR   = _PROJECT_ROOT / "data" / "results" / "optimization"
 OPTUNA_DB_DIR = _PROJECT_ROOT / "data" / "optuna"
 REPORTS_DIR   = _PROJECT_ROOT / "simulation" / "optimizers" / "docs"
 
-BASELINE_JSON = RESULTS_DIR / "d2s_baseline.json"
-DB_PATH       = OPTUNA_DB_DIR / "d2s_study.db"
-DB_URL        = f"sqlite:///{DB_PATH}"
-STUDY_NAME    = "d2s_optuna_v1"
+BASELINE_JSON  = RESULTS_DIR / "d2s_baseline.json"
+# v2: SQLite 대신 JournalStorage (다중 프로세스 lock-free)
+JOURNAL_PATH   = OPTUNA_DB_DIR / "d2s_journal_v2.log"
+STUDY_NAME     = "d2s_optuna_v2"
 
-# 스코어 함수 가중치
-SCORE_WIN_RATE_W = 0.50
-SCORE_RETURN_W   = 0.30
-SCORE_MDD_W      = 0.20
+# 스코어 함수 (v2: Sharpe 기반, return 지배 문제 해결)
+#   구: win_rate×0.50 + return×0.30 - mdd×0.20
+#   신: win_rate×0.40 + sharpe×15  - mdd×0.30
+SCORE_WIN_RATE_W = 0.40
+SCORE_SHARPE_W   = 15.0
+SCORE_MDD_W      = 0.30
 
 # 페널티
 MIN_SELL_TRADES = 5    # 매도 거래 최소 횟수 (미달 시 패널티)
-MAX_MDD_HARD    = 50.0 # MDD 상한 (초과 시 패널티)
+MAX_MDD_HARD    = 30.0 # MDD 상한 (초과 시 패널티, v2: 50→30%)
 
 
 # ============================================================
@@ -200,8 +209,10 @@ def run_backtest(params: dict, start: date, end: date) -> dict:
 def calc_score(report: dict) -> float:
     """IS 백테스트 결과에서 최적화 스코어를 계산한다.
 
-    score = win_rate × 0.5 + total_return × 0.3 − |mdd| × 0.2
-    페널티: 거래 부족 / MDD 과도
+    score = win_rate × 0.40 + sharpe_ratio × 15 − |mdd| × 0.30
+    (v2: return 지배 문제 해결 — Sharpe로 리스크 조정 수익률 반영)
+
+    페널티: 거래 부족 / MDD 30% 초과
     """
     n_sells = report.get("sell_trades", 0)
     if n_sells < MIN_SELL_TRADES:
@@ -212,11 +223,11 @@ def calc_score(report: dict) -> float:
         return -50.0
 
     win_rate     = report.get("win_rate", 0)
-    total_return = report.get("total_return_pct", 0)
+    sharpe_ratio = report.get("sharpe_ratio", 0)
 
     return (
         SCORE_WIN_RATE_W * win_rate
-        + SCORE_RETURN_W * total_return
+        + SCORE_SHARPE_W * sharpe_ratio
         - SCORE_MDD_W * mdd
     )
 
@@ -244,13 +255,19 @@ def objective(trial: optuna.Trial) -> float:
 
 
 def _worker_run(args: tuple) -> None:
-    """mp.Pool 워커: SQLite 공유 DB에서 Optuna trial을 실행한다."""
-    n_trials_per_worker, db_url, study_name = args
+    """mp.Pool 워커: JournalStorage 공유로 Optuna trial을 실행한다.
+
+    JournalFileBackend는 파일 락 기반으로 다중 프로세스 동시 쓰기가 안전.
+    """
+    n_trials_per_worker, journal_path_str, study_name = args
     # 각 워커에서 별도 import (spawn safe)
     import optuna as _optuna
+    from optuna.storages import JournalStorage as _JS
+    from optuna.storages.journal import JournalFileBackend as _JFB
     _optuna.logging.set_verbosity(_optuna.logging.WARNING)
 
-    study = _optuna.load_study(study_name=study_name, storage=db_url)
+    _storage = _JS(_JFB(journal_path_str))
+    study = _optuna.load_study(study_name=study_name, storage=_storage)
     study.optimize(objective, n_trials=n_trials_per_worker, show_progress_bar=False)
 
 
@@ -297,17 +314,20 @@ def run_stage2(
     n_jobs: int = 20,
     timeout: int | None = None,
     study_name: str = STUDY_NAME,
-    db_url: str = DB_URL,
+    journal_path: Path = JOURNAL_PATH,
 ) -> None:
-    """Stage 2: Optuna 최적화 — n_jobs 병렬 프로세스 × SQLite 공유 DB."""
+    """Stage 2: Optuna 최적화 — n_jobs 병렬 프로세스 × JournalStorage 공유."""
     print("\n" + "=" * 70)
     print(f"  [Stage 2] D2S Optuna 최적화 — {n_trials} trials / {n_jobs} workers")
-    print(f"  DB: {db_url}")
+    print(f"  Journal: {journal_path}")
     print(f"  IS 기간: {IS_START} ~ {IS_END}")
     print("=" * 70)
 
     # DB 디렉토리 생성
     OPTUNA_DB_DIR.mkdir(parents=True, exist_ok=True)
+
+    # JournalStorage: 다중 프로세스 lock-free (SQLite 대체)
+    storage = JournalStorage(JournalFileBackend(str(journal_path)))
 
     # Baseline 참조
     baseline_score = None
@@ -315,9 +335,11 @@ def run_stage2(
     if BASELINE_JSON.exists():
         with open(BASELINE_JSON) as f:
             bl = json.load(f)
-        baseline_score  = bl.get("score", 0)
-        baseline_return = bl.get("report", {}).get("total_return_pct", 0)
-        print(f"  Baseline score={baseline_score:.2f}, return={baseline_return:+.2f}%")
+        # baseline score를 v2 스코어로 재계산
+        bl_r = bl.get("report", {})
+        baseline_score = calc_score(bl_r)
+        baseline_return = bl_r.get("total_return_pct", 0)
+        print(f"  Baseline score(v2)={baseline_score:.2f}, return={baseline_return:+.2f}%")
 
     # Study 생성 (load_if_exists=True → 재시작 가능)
     sampler = TPESampler(seed=42, n_startup_trials=min(20, n_trials))
@@ -325,7 +347,7 @@ def run_stage2(
         study_name=study_name,
         direction="maximize",
         sampler=sampler,
-        storage=db_url,
+        storage=storage,
         load_if_exists=True,
     )
 
@@ -344,7 +366,7 @@ def run_stage2(
             "w_streak":  D2S_ENGINE["market_score_weights"]["streak_score"],
             "w_vol":     D2S_ENGINE["market_score_weights"]["vol_score"],
             "w_btc":     D2S_ENGINE["market_score_weights"]["btc_score"],
-            "riskoff_spy_min_threshold":   D2S_ENGINE["riskoff_spy_min_threshold"],
+            "riskoff_spy_min_threshold":   -1.6,   # -1.5 → step=0.2 경계값으로 조정
             "riskoff_gld_optimal_min":     D2S_ENGINE["riskoff_gld_optimal_min"],
             "riskoff_spy_optimal_max":     D2S_ENGINE["riskoff_spy_optimal_max"],
             "riskoff_consecutive_boost":   D2S_ENGINE["riskoff_consecutive_boost"],
@@ -364,7 +386,7 @@ def run_stage2(
             "vol_entry_max":     D2S_ENGINE["vol_entry_max"],
             "contrarian_entry_threshold":          D2S_ENGINE["contrarian_entry_threshold"],
             "amdl_friday_contrarian_threshold":    D2S_ENGINE["amdl_friday_contrarian_threshold"],
-            "take_profit_pct":        D2S_ENGINE["take_profit_pct"],
+            "take_profit_pct":        6.0,      # 5.9 → step=0.5 경계값으로 조정
             "optimal_hold_days_max":  D2S_ENGINE["optimal_hold_days_max"],
             "dca_max_daily":          D2S_ENGINE["dca_max_daily"],
             "buy_size_large":         D2S_ENGINE["buy_size_large"],
@@ -391,7 +413,7 @@ def run_stage2(
             worker_args = []
             for i in range(n_jobs):
                 n = trials_per_worker + (1 if i < extra else 0)
-                worker_args.append((n, db_url, study_name))
+                worker_args.append((n, str(journal_path), study_name))
 
             ctx = mp.get_context("spawn")
             print(f"  workers: {n_jobs} × ~{trials_per_worker} trials/worker")
@@ -405,10 +427,10 @@ def run_stage2(
     _print_study_summary(study, baseline_score, baseline_return)
 
     # 리포트 저장
-    _save_optuna_report(study, baseline_score, n_trials, n_jobs)
+    _save_optuna_report(study, baseline_score, n_trials, n_jobs, journal_path)
 
 
-def run_stage3(study_name: str = STUDY_NAME, db_url: str = DB_URL) -> None:
+def run_stage3(study_name: str = STUDY_NAME, journal_path: Path = JOURNAL_PATH) -> None:
     """Stage 3: 최적 파라미터로 OOS 검증."""
     print("\n" + "=" * 70)
     print("  [Stage 3] D2S OOS 검증 — 최적 파라미터")
@@ -418,7 +440,8 @@ def run_stage3(study_name: str = STUDY_NAME, db_url: str = DB_URL) -> None:
     OPTUNA_DB_DIR.mkdir(parents=True, exist_ok=True)
 
     try:
-        study = optuna.load_study(study_name=study_name, storage=db_url)
+        storage = JournalStorage(JournalFileBackend(str(journal_path)))
+        study = optuna.load_study(study_name=study_name, storage=storage)
     except Exception:
         print(f"  [ERROR] Study '{study_name}' 없음. Stage 2를 먼저 실행하세요.")
         return
@@ -561,6 +584,7 @@ def _save_optuna_report(
     baseline_score: float | None,
     n_trials: int,
     n_jobs: int,
+    journal_path: Path = JOURNAL_PATH,
 ) -> None:
     """간이 Optuna 마크다운 리포트를 저장한다."""
     REPORTS_DIR.mkdir(parents=True, exist_ok=True)
@@ -575,11 +599,13 @@ def _save_optuna_report(
     top5 = sorted(completed, key=lambda t: t.value, reverse=True)[:5]
 
     lines = [
-        "# D2S Optuna 최적화 리포트",
+        "# D2S Optuna 최적화 리포트 (v2)",
         "",
         f"> 생성일: {datetime.now().strftime('%Y-%m-%d %H:%M')}  ",
         f"> IS 기간: {IS_START} ~ {IS_END}  ",
-        f"> 총 trial: {len(completed)}  |  n_jobs: {n_jobs}",
+        f"> 총 trial: {len(completed)}  |  n_jobs: {n_jobs}  ",
+        f"> 스코어: win_rate×0.40 + sharpe×15 - mdd×0.30  ",
+        f"> Storage: {journal_path.name}",
         "",
         "## 1. Best Trial",
         "",
@@ -639,13 +665,15 @@ def main():
                         help="최대 실행 시간(초, 기본: 없음)")
     parser.add_argument("--study-name", type=str, default=STUDY_NAME,
                         help=f"Optuna study 이름 (기본: {STUDY_NAME})")
-    parser.add_argument("--db",        type=str, default=DB_URL,
-                        help=f"Optuna DB URL (기본: {DB_URL})")
+    parser.add_argument("--journal",   type=str, default=str(JOURNAL_PATH),
+                        help=f"JournalStorage 경로 (기본: {JOURNAL_PATH})")
     args = parser.parse_args()
+    journal_path = Path(args.journal)
 
     print("=" * 70)
-    print("  D2S Optuna 파라미터 최적화  (Study A/B/C 반영)")
+    print("  D2S Optuna 파라미터 최적화 v2 (Study A/B/C 반영)")
     print(f"  IS: {IS_START} ~ {IS_END}  |  OOS: {OOS_START} ~ {OOS_END}")
+    print(f"  스코어: win_rate×0.40 + sharpe×15 - mdd×0.30")
     print("=" * 70)
 
     if args.stage == 1:
@@ -653,20 +681,22 @@ def main():
     elif args.stage == 2:
         run_stage2(
             n_trials=args.n_trials, n_jobs=args.n_jobs,
-            timeout=args.timeout, study_name=args.study_name, db_url=args.db,
+            timeout=args.timeout, study_name=args.study_name,
+            journal_path=journal_path,
         )
     elif args.stage == 3:
-        run_stage3(study_name=args.study_name, db_url=args.db)
+        run_stage3(study_name=args.study_name, journal_path=journal_path)
     else:
         # 1 → 2 → 3 연속 실행
         run_stage1()
         print()
         run_stage2(
             n_trials=args.n_trials, n_jobs=args.n_jobs,
-            timeout=args.timeout, study_name=args.study_name, db_url=args.db,
+            timeout=args.timeout, study_name=args.study_name,
+            journal_path=journal_path,
         )
         print()
-        run_stage3(study_name=args.study_name, db_url=args.db)
+        run_stage3(study_name=args.study_name, journal_path=journal_path)
 
     print("\n  완료!")
 

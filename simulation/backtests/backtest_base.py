@@ -36,6 +36,13 @@ from simulation.strategies.params import BaseParams, FeeConfig
 MARKET_OPEN = time(9, 30)
 MARKET_CLOSE = time(16, 0)
 
+# ============================================================
+# 프로세스 레벨 데이터 캐시 (spawn worker당 1회 로드)
+# ============================================================
+# key: parquet 경로 문자열
+# value: (df: pd.DataFrame, poly: dict, ts_prices, sym_bars, day_timestamps)
+_DATA_CACHE: dict = {}
+
 
 class BacktestBase(ABC):
     """Template Method 기반 백테스트 엔진 기반 클래스.
@@ -224,17 +231,27 @@ class BacktestBase(ABC):
                        getattr(pos, 'total_invested_usd', 0.0))
 
     def _load_data(self) -> tuple[pd.DataFrame, dict]:
-        """공통 데이터를 로드한다. backtest_1min_3y.parquet 를 기본으로 사용한다."""
+        """공통 데이터를 로드한다. 같은 프로세스 내 2번째 호출부터는 캐시에서 반환한다."""
         import config
-        print("[1/4] 데이터 준비")
         parquet_path = config.OHLCV_1MIN_DEFAULT
-        print(f"  OHLCV: {parquet_path.name}")
-        df = backtest_common.load_parquet(parquet_path)
-        # date 컬럼을 datetime.date 객체로 정규화 (문자열로 저장된 경우 변환)
-        if "date" in df.columns and len(df) > 0 and isinstance(df["date"].iloc[0], str):
-            import pandas as _pd
-            df["date"] = _pd.to_datetime(df["date"]).dt.date
-        poly = backtest_common.load_polymarket_daily(config.POLY_DATA_DIR)
+        cache_key = str(parquet_path)
+
+        if cache_key not in _DATA_CACHE:
+            print("[1/4] 데이터 준비")
+            print(f"  OHLCV: {parquet_path.name}")
+            df = backtest_common.load_parquet(parquet_path)
+            if "date" in df.columns and len(df) > 0 and isinstance(df["date"].iloc[0], str):
+                import pandas as _pd
+                df["date"] = _pd.to_datetime(df["date"]).dt.date
+            poly = backtest_common.load_polymarket_daily(config.POLY_DATA_DIR)
+            # 2-tuple로 임시 저장 (preindex는 run()에서 추가)
+            _DATA_CACHE[cache_key] = (df, poly)
+            print(f"  Loaded: {len(df):,} rows  (RAM 캐시 저장)")
+        else:
+            print("[1/4] 데이터 준비 (RAM 캐시)")
+            entry = _DATA_CACHE[cache_key]
+            df, poly = entry[0], entry[1]
+
         return df, poly
 
     def _select_coin_follow(
@@ -275,11 +292,17 @@ class BacktestBase(ABC):
         """메인 백테스트 루프를 실행한다."""
         self._verbose = verbose
 
-        # 1. Load data
+        # 1. Load data (프로세스 내 캐시 활용)
+        import config as _cfg
+        cache_key = str(_cfg.OHLCV_1MIN_DEFAULT)
         df, poly = self._load_data()
 
-        # Pre-index DataFrame for O(1) bar lookup
-        ts_prices, sym_bars, day_timestamps = backtest_common.preindex_dataframe(df)
+        # Pre-index DataFrame for O(1) bar lookup (캐시 활용)
+        if cache_key in _DATA_CACHE and len(_DATA_CACHE[cache_key]) == 5:
+            _, _, ts_prices, sym_bars, day_timestamps = _DATA_CACHE[cache_key]
+        else:
+            ts_prices, sym_bars, day_timestamps = backtest_common.preindex_dataframe(df)
+            _DATA_CACHE[cache_key] = (df, poly, ts_prices, sym_bars, day_timestamps)
 
         # Version-specific extra data loading
         self._load_extra_data(df, poly)

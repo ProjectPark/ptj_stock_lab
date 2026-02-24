@@ -128,8 +128,8 @@ def main():
     parser = argparse.ArgumentParser(description="PTJ v5 Optuna 최적화")
     parser.add_argument("--stage", type=int, choices=[1, 2], default=None,
                         help="실행 단계 (1: baseline, 2: Optuna, 미지정: 둘 다)")
-    parser.add_argument("--n-trials", type=int, default=20, help="Optuna trial 수 (기본: 20)")
-    parser.add_argument("--n-jobs", type=int, default=6, help="병렬 프로세스 수 (기본: 6)")
+    parser.add_argument("--n-trials", type=int, default=380, help="Optuna trial 수 (기본: 380 = 19 workers × 20 rounds)")
+    parser.add_argument("--n-jobs", type=int, default=19, help="병렬 프로세스 수 (기본: 19, CPU 20 기준)")
     parser.add_argument("--timeout", type=int, default=None, help="최대 실행 시간(초)")
     parser.add_argument("--study-name", type=str, default="ptj_v5_opt", help="study 이름")
     parser.add_argument("--db", type=str, default=None, help="Optuna DB URL (기본: in-memory)")

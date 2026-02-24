@@ -1,0 +1,16 @@
+sync:
+  code:
+    alpha: "."
+    beta: "gigaflops-node54:/mnt/giga/project/ptj_stock_lab"
+    mode: "two-way-resolved"
+    ignore:
+      vcs: true
+      paths:
+        - "data/"
+        - "charts/"
+        - "history/"
+        - "__pycache__"
+        - ".DS_Store"
+        - "*.pyc"
+        - "*.log"
+        - ".env"

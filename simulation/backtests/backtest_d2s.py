@@ -73,11 +73,13 @@ class D2SBacktest:
         start_date: date = date(2025, 3, 3),   # 기술적 지표 워밍업 후
         end_date: date = date(2026, 2, 17),
         use_fees: bool = True,
+        data_path: "Path | None" = None,       # None이면 market_daily.parquet 사용
     ):
         self.params = params or D2S_ENGINE
         self.start_date = start_date
         self.end_date = end_date
         self.use_fees = use_fees
+        self.data_path = data_path
 
         self.engine = D2SEngine(self.params)
         self.preprocessor = TechnicalPreprocessor(self.params)
@@ -96,7 +98,10 @@ class D2SBacktest:
     def _load_data(self) -> tuple[pd.DataFrame, dict[str, pd.DataFrame], dict]:
         """market_daily + Polymarket 데이터를 로드한다."""
         data_dir = _PROJECT_ROOT / "data"
-        market_path = data_dir / "market" / "daily" / "market_daily.parquet"
+        if self.data_path is not None:
+            market_path = self.data_path
+        else:
+            market_path = data_dir / "market" / "daily" / "market_daily.parquet"
         poly_dir = data_dir / "polymarket"
 
         print("[1/3] 데이터 로드")

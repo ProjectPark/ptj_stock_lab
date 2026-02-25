@@ -5,7 +5,10 @@ PTJ 매매법 대시보드 - 설정
 """
 from pathlib import Path
 
-from dotenv import load_dotenv
+try:
+    from dotenv import load_dotenv
+except ImportError:
+    def load_dotenv(*args, **kwargs): pass  # noqa: E731 (SLURM 환경 — dotenv 미설치)
 import os
 
 # ============================================================

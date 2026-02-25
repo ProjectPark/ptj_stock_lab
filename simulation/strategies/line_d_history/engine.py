@@ -298,7 +298,7 @@ class JunTradeEngine:
             "closed_trades": portfolio.closed_trades,
             "daily_snapshots": portfolio.daily_snapshots,
             "equity_curve": [
-                (snap["date"], snap["total_value_usd"])
+                (snap["date"], snap["total_pnl_usd"])
                 for snap in portfolio.daily_snapshots
             ],
         }

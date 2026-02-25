@@ -19,6 +19,7 @@ class Portfolio:
         self.positions: dict[str, Position] = {}   # ticker → Position
         self.closed_trades: list[ClosedTrade] = []
         self.daily_snapshots: list[dict] = []
+        self.realized_pnl_usd: float = 0.0  # 누적 실현 손익
 
     # ── 포지션 사이징 ──────────────────────────────────────────────────────
     def position_size_usd(self, vix: float) -> float:
@@ -87,20 +88,26 @@ class Portfolio:
             return None
         trade = ClosedTrade.from_position(pos, close_date, price_usd, exit_reason)
         self.closed_trades.append(trade)
+        self.realized_pnl_usd += trade.pnl_usd
         return trade
 
     # ── 스냅샷 ────────────────────────────────────────────────────────────
     def snapshot(self, today: date, price_map: dict[str, float]) -> None:
-        """일별 포트폴리오 평가액 스냅샷 저장."""
-        total_usd = sum(
-            pos.shares * price_map.get(t, pos.avg_price_usd)
+        """일별 포트폴리오 평가액 스냅샷 저장 (실현+미실현 PnL)."""
+        # 미실현 손익: 현재 평가액 - 투입원가
+        unrealized_pnl = sum(
+            pos.shares * price_map.get(t, pos.avg_price_usd) - pos.total_cost_usd
             for t, pos in self.positions.items()
         )
+        # 총 PnL = 실현 + 미실현
+        total_pnl = self.realized_pnl_usd + unrealized_pnl
         self.daily_snapshots.append({
             "date": today,
             "open_positions": len(self.positions),
             "tickers": list(self.positions.keys()),
-            "total_value_usd": round(total_usd, 2),
+            "total_pnl_usd": round(total_pnl, 2),
+            "realized_pnl_usd": round(self.realized_pnl_usd, 2),
+            "unrealized_pnl_usd": round(unrealized_pnl, 2),
         })
 
     # ── 집계 ──────────────────────────────────────────────────────────────

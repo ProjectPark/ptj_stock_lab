@@ -39,9 +39,10 @@ class V5Optimizer(BaseOptimizer):
 
     version = "v5"
 
-    def __init__(self, gap_max: float = 4.0):
+    def __init__(self, gap_max: float = 4.0, variant: str = "default"):
         super().__init__()
         self.gap_max = gap_max
+        self.variant = variant
 
     def get_baseline_params(self) -> dict:
         """현재 config.py에 설정된 v5 파라미터를 반환한다."""
@@ -69,6 +70,11 @@ class V5Optimizer(BaseOptimizer):
             "V5_CB_GLD_COOLDOWN_DAYS": config.V5_CB_GLD_COOLDOWN_DAYS,
             "V5_CB_BTC_CRASH_PCT": config.V5_CB_BTC_CRASH_PCT,
             "V5_CB_BTC_SURGE_PCT": config.V5_CB_BTC_SURGE_PCT,
+            # s3 진입 시간
+            "V5_ENTRY_DEFAULT_START_HOUR": config.V5_ENTRY_DEFAULT_START_HOUR,
+            "V5_ENTRY_DEFAULT_START_MINUTE": config.V5_ENTRY_DEFAULT_START_MINUTE,
+            # s5 횡보장 확장
+            "COIN_SELL_BEARISH_PCT": getattr(config, "COIN_SELL_BEARISH_PCT", 0.3),
             # v2 공유
             **get_shared_baseline_params(),
         }
@@ -88,15 +94,23 @@ class V5Optimizer(BaseOptimizer):
             "V5_PAIR_GAP_ENTRY_THRESHOLD": trial.suggest_float(
                 "V5_PAIR_GAP_ENTRY_THRESHOLD", 1.0, self.gap_max, step=0.2
             ),
-            "V5_DCA_MAX_COUNT": trial.suggest_int("V5_DCA_MAX_COUNT", 1, 7),
+            "V5_DCA_MAX_COUNT": trial.suggest_int(
+                "V5_DCA_MAX_COUNT", 0, 2) if self.variant == "s6" else trial.suggest_int(
+                "V5_DCA_MAX_COUNT", 1, 7),
             "V5_MAX_PER_STOCK": trial.suggest_int("V5_MAX_PER_STOCK", 3_000, 10_000, step=250),
             "V5_COIN_TRIGGER_PCT": trial.suggest_float("V5_COIN_TRIGGER_PCT", 2.0, 7.0, step=0.5),
             "V5_CONL_TRIGGER_PCT": trial.suggest_float("V5_CONL_TRIGGER_PCT", 2.0, 7.0, step=0.5),
             "V5_SPLIT_BUY_INTERVAL_MIN": trial.suggest_int("V5_SPLIT_BUY_INTERVAL_MIN", 5, 30, step=5),
-            "V5_ENTRY_CUTOFF_HOUR": trial.suggest_int("V5_ENTRY_CUTOFF_HOUR", 10, 14),
+            "V5_ENTRY_CUTOFF_HOUR": trial.suggest_int(
+                "V5_ENTRY_CUTOFF_HOUR", 12, 15) if self.variant == "s3" else trial.suggest_int(
+                "V5_ENTRY_CUTOFF_HOUR", 10, 14),
             "V5_ENTRY_CUTOFF_MINUTE": trial.suggest_categorical("V5_ENTRY_CUTOFF_MINUTE", [0, 30]),
-            "V5_INITIAL_BUY": trial.suggest_int("V5_INITIAL_BUY", 1_000, 3_500, step=250),
-            "V5_DCA_BUY": trial.suggest_int("V5_DCA_BUY", 250, 1_500, step=125),
+            "V5_INITIAL_BUY": trial.suggest_int(
+                "V5_INITIAL_BUY", 2_000, 6_000, step=250) if self.variant == "s6" else trial.suggest_int(
+                "V5_INITIAL_BUY", 1_000, 3_500, step=250),
+            "V5_DCA_BUY": trial.suggest_int(
+                "V5_DCA_BUY", 250, 500, step=125) if self.variant == "s6" else trial.suggest_int(
+                "V5_DCA_BUY", 250, 1_500, step=125),
             # v5 횡보장
             "V5_SIDEWAYS_MIN_SIGNALS": trial.suggest_int("V5_SIDEWAYS_MIN_SIGNALS", 2, 5),
             "V5_SIDEWAYS_POLY_LOW": trial.suggest_float("V5_SIDEWAYS_POLY_LOW", 0.30, 0.50, step=0.05),
@@ -118,6 +132,28 @@ class V5Optimizer(BaseOptimizer):
             "PAIR_GAP_SELL_THRESHOLD_V2": trial.suggest_float("PAIR_GAP_SELL_THRESHOLD_V2", 2.0, 10.0, step=0.1),
             "PAIR_SELL_FIRST_PCT": trial.suggest_float("PAIR_SELL_FIRST_PCT", 0.5, 1.0, step=0.05),
         }
+
+        # s3: 진입 시간 윈도우 집중 탐색
+        if self.variant == "s3":
+            params["V5_ENTRY_DEFAULT_START_HOUR"] = trial.suggest_int(
+                "V5_ENTRY_DEFAULT_START_HOUR", 4, 11
+            )
+            params["V5_ENTRY_DEFAULT_START_MINUTE"] = trial.suggest_categorical(
+                "V5_ENTRY_DEFAULT_START_MINUTE", [0, 30]
+            )
+
+        # s5: 횡보장 파라미터 확장 탐색
+        if self.variant == "s5":
+            params["V5_SIDEWAYS_GAP_FAIL_COUNT"] = trial.suggest_int(
+                "V5_SIDEWAYS_GAP_FAIL_COUNT", 1, 5
+            )
+            params["V5_SIDEWAYS_TRIGGER_FAIL_COUNT"] = trial.suggest_int(
+                "V5_SIDEWAYS_TRIGGER_FAIL_COUNT", 1, 5
+            )
+            params["COIN_SELL_BEARISH_PCT"] = trial.suggest_float(
+                "COIN_SELL_BEARISH_PCT", 0.1, 1.0, step=0.1
+            )
+
         return params
 
 
@@ -135,9 +171,12 @@ def main():
     parser.add_argument("--db", type=str, default=None, help="Optuna DB URL (기본: in-memory)")
     parser.add_argument("--gap-max", type=float, default=4.0,
                         help="V5_PAIR_GAP_ENTRY_THRESHOLD 탐색 상한 (%%, 기본: 4.0)")
+    parser.add_argument("--variant", type=str, default="default",
+                        choices=["default", "s3", "s5", "s6"],
+                        help="탐색 공간 변형 (s3: 진입시간, s5: 횡보장, s6: DCA최소화)")
     args = parser.parse_args()
 
-    opt = V5Optimizer(gap_max=args.gap_max)
+    opt = V5Optimizer(gap_max=args.gap_max, variant=args.variant)
 
     print("=" * 70)
     print("  PTJ v5 — Optuna 파라미터 최적화")

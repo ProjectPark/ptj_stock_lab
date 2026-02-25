@@ -50,6 +50,7 @@ class D2SBacktestV2(D2SBacktest):
         end_date: date = date(2026, 2, 17),
         use_fees: bool = True,
         data_path=None,
+        slippage_pct: float = 0.05,
     ):
         super().__init__(
             params=params or D2S_ENGINE_V2,
@@ -57,6 +58,7 @@ class D2SBacktestV2(D2SBacktest):
             end_date=end_date,
             use_fees=use_fees,
             data_path=data_path,
+            slippage_pct=slippage_pct,
         )
         # BB 하단 돌파 포지션 메타 — ticker → breach_date
         self.position_meta: dict[str, date | None] = {}
@@ -222,9 +224,9 @@ class D2SBacktestV2(D2SBacktest):
                             )
 
             # ── [B] 오늘 종가 데이터로 시그널 결정 (내일 실행 예약) ──
-            # 기본 시그널 생성 (엔진 — R1~R16)
+            # daily_buy_counts는 오늘 체결 추적용 — 내일 신호 생성에는 빈 dict 전달
             new_signals = self.engine.generate_daily_signals(
-                snap, self.positions, daily_buy_counts,
+                snap, self.positions, {},
             )
 
             # R18: 조기 손절 시그널 추가

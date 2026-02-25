@@ -269,7 +269,7 @@ slurm-collect:
 # ── slurm-status: 현재 내 Job 목록 ──
 slurm-status:
 	@echo ">>> [slurm-status] 서버 SLURM Job 목록:"
-	@ssh $(REMOTE_HOST) "squeue -u $$(whoami) -o '%.10i %.15j %.8T %.10M %.6D %R'" 2>/dev/null || \
+	@ssh $(REMOTE_HOST) "squeue -u \$$(whoami) -o '%.10i %.15j %.8T %.10M %.6D %R'" 2>/dev/null || \
 	  echo ">>> 서버 연결 실패. 네트워크를 확인하세요."
 	@echo ""
 	@echo ">>> [slurm-status] 로컬 저장된 Job:"

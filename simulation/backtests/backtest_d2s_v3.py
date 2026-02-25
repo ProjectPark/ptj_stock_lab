@@ -58,6 +58,7 @@ class D2SBacktestV3(D2SBacktestV2):
         end_date: date = date(2026, 2, 17),
         use_fees: bool = True,
         data_path=None,
+        slippage_pct: float = 0.05,
     ):
         super().__init__(
             params=params or D2S_ENGINE_V3,
@@ -65,6 +66,7 @@ class D2SBacktestV3(D2SBacktestV2):
             end_date=end_date,
             use_fees=use_fees,
             data_path=data_path,
+            slippage_pct=slippage_pct,
         )
         # SPY 종가 이력 (SMA 계산용)
         sma_period = self.params.get("regime_spy_sma_period", 20)
@@ -310,8 +312,9 @@ class D2SBacktestV3(D2SBacktestV2):
             self._regime_days[regime] = self._regime_days.get(regime, 0) + 1
 
             # 기본 시그널 (엔진 R1~R18)
+            # daily_buy_counts는 오늘 체결 추적용 — 내일 신호 생성에는 빈 dict 전달
             new_signals = self.engine.generate_daily_signals(
-                snap, self.positions, daily_buy_counts,
+                snap, self.positions, {},
             )
 
             # R20/R21: 레짐 조건부 청산 오버라이드

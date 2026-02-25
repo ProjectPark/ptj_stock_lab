@@ -385,8 +385,9 @@ class D2SBacktest:
                             )
 
             # ── [B] 오늘 종가 데이터로 시그널 결정 (내일 실행 예약) ──
+            # daily_buy_counts는 오늘 체결 추적용 — 내일 신호 생성에는 빈 dict 전달
             pending_signals = self.engine.generate_daily_signals(
-                snap, self.positions, daily_buy_counts,
+                snap, self.positions, {},
             )
 
             # ── [C] SPY streak 업데이트 (오늘 종가 기반) ─────────────

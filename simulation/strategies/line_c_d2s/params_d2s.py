@@ -41,7 +41,7 @@ D2S_ENGINE = {
     "btc_up_max": 0.75,                   # BTC up > 0.75 → 매수 억제 (OOS)
     "btc_up_min": 0.40,                   # BTC up < 0.40 → 매수 억제 (OOS 하한)
     "confidence_suppress": True,          # confidence_signal → 매수 억제 (p=0.0003)
-    "spy_streak_max": 3,                  # SPY 3일+ 연속 상승 → 매수 금지 (27.3%)
+    "spy_streak_max": 999,                # SPY streak 필터 비활성화 (Phase 4A)
     "spy_bearish_threshold": -1.0,        # SPY < -1% → 역발상 매수 (50%)
 
     # ── R14 리스크오프 그라데이션 (Study A, §1-5) ──────────
@@ -81,18 +81,18 @@ D2S_ENGINE = {
     "contrarian_entry_threshold": 0.0,    # 기본: 종목 하락 시 역발상
 
     # MSTU: R14 발동 시 역발상만 허용. R14 발동 + 순발상 = 절대 금지 (25%)
-    "mstu_riskoff_contrarian_only": True,
+    "mstu_riskoff_contrarian_only": False,
     # ROBN: R14 발동 시 순발상(모멘텀) 진입 우대 (68.8%)
-    "robn_riskoff_momentum_boost": True,
+    "robn_riskoff_momentum_boost": False,
     # CONL: R14 없이 역발상 효과 없음 (46.7%). R14 병행 시만 진입 허용
-    "conl_contrarian_require_riskoff": True,
+    "conl_contrarian_require_riskoff": False,
     # AMDL: 금요일 + 역발상 -1.5% 이하 특화 (66.7%)
     "amdl_friday_contrarian_threshold": -1.5,
 
     # ── 6. 청산 규칙 (R4, R5) ───────────────────────────────
     "take_profit_pct": 5.9,               # 이익실현 기준 gross (중앙값 +5.86%)
     "optimal_hold_days_min": 4,           # 최적 보유 하한
-    "optimal_hold_days_max": 7,           # 최적 보유 상한 (초과 시 강제청산)
+    "optimal_hold_days_max": 5,           # 최적 보유 상한 (초과 시 강제청산)
     "dca_max_daily": 5,                   # 일일 동일종목 매수 상한 (R5)
 
     # ── 7. 자금 ──────────────────────────────────────────────

@@ -225,7 +225,7 @@ class D2SBacktestV3(D2SBacktestV2):
     # ------------------------------------------------------------------
 
     def run(self, verbose: bool = True) -> "D2SBacktestV3":
-        """v3 백테스트 실행 — 레짐 감지 + 조건부 청산."""
+        """v3 백테스트 실행 — 레짐 감지 + 조건부 청산 (look-ahead bias 수정)."""
         df, tech, poly = self._load_data()
 
         all_dates = sorted(df.index)
@@ -236,7 +236,7 @@ class D2SBacktestV3(D2SBacktestV2):
         ]
 
         if verbose:
-            print(f"\n[3/3] D2S v3 백테스트 실행 (레짐 감지 + R19/R20/R21)")
+            print(f"\n[3/3] D2S v3 백테스트 실행 (레짐 감지 + R19/R20/R21 + look-ahead bias 수정)")
             print(f"  기간: {trading_dates[0]} ~ {trading_dates[-1]} ({len(trading_dates)}일)")
             print(f"  초기 자본: ${self.initial_capital:,.0f}")
             p = self.params
@@ -253,36 +253,73 @@ class D2SBacktestV3(D2SBacktestV2):
 
         spy_streak = 0
 
+        # T일 결정 → T+1일 시가에 체결
+        pending_signals: list[dict] = []
+
         for i, td in enumerate(trading_dates):
             snap = self._build_snapshot(td, tech, poly, spy_streak)
             if snap is None:
                 continue
 
-            # SPY 종가 업데이트 (SMA 계산용)
+            # ── [A] 전날 결정 시그널을 오늘 시가에 체결 ────────────
+            daily_buy_counts: dict[str, int] = {}
+
+            if pending_signals:
+                # 매도 먼저 (signal에 저장된 결정 레짐 사용)
+                for sig in pending_signals:
+                    if sig["action"] == "SELL":
+                        pnl = self._execute_sell(sig["ticker"], sig["size"], snap, sig["reason"])
+                        if sig["ticker"] not in self.positions:
+                            self.position_meta.pop(sig["ticker"], None)
+                            sig_regime = sig.get("signal_regime", "neutral")
+                            self._regime_exits[sig_regime].append(
+                                pnl.pnl_pct if pnl is not None else 0
+                            )
+
+                # 매수 (daily_entry_cap 체크 포함)
+                daily_entry_cap = self.params.get("daily_new_entry_cap", 1.0)
+                daily_entry_used = 0.0
+                for sig in pending_signals:
+                    if sig["action"] == "BUY":
+                        entry_fraction = sig["size"]
+                        if daily_entry_used + entry_fraction > daily_entry_cap:
+                            continue
+                        trade = self._execute_buy(
+                            sig["ticker"], sig["size"], snap,
+                            sig["reason"], sig.get("score", 0),
+                        )
+                        if trade:
+                            daily_entry_used += entry_fraction
+                            daily_buy_counts[sig["ticker"]] = (
+                                daily_buy_counts.get(sig["ticker"], 0) + 1
+                            )
+
+            # ── [B] 오늘 종가 데이터로 시그널 결정 (내일 실행 예약) ──
+
+            self._current_td = td  # 서브클래스에서 날짜 접근 가능 (VIX/MA 조회용)
+
+            # SPY 종가 업데이트 (SMA 계산용 — 오늘 종가 기반)
             spy_close = snap.closes.get("SPY", None)
             if spy_close:
                 self._spy_closes.append(float(spy_close))
 
             # 레짐 감지 (SPY streak + SMA + Polymarket BTC)
-            poly_btc = snap.poly_btc_up if snap is not None else None
+            poly_btc = snap.poly_btc_up
             regime = self._detect_regime(spy_streak, spy_close, poly_btc)
             self._current_regime = regime
             self._regime_days[regime] = self._regime_days.get(regime, 0) + 1
 
-            daily_buy_counts: dict[str, int] = {}
-
-            # 기본 시그널 (R1~R18)
-            signals = self.engine.generate_daily_signals(
+            # 기본 시그널 (엔진 R1~R18)
+            new_signals = self.engine.generate_daily_signals(
                 snap, self.positions, daily_buy_counts,
             )
 
-            # ── R20/R21: 레짐 조건부 청산 오버라이드 ────────────
-            # 기존 SELL 시그널 제거 (기본 check_exit가 만든 것) → 레짐 버전으로 교체
-            non_sell = [s for s in signals if s["action"] != "SELL"]
+            # R20/R21: 레짐 조건부 청산 오버라이드
+            # 기존 SELL 시그널 제거 → 레짐 버전으로 교체
+            non_sell = [s for s in new_signals if s["action"] != "SELL"]
             regime_sell = []
 
             for ticker, pos in list(self.positions.items()):
-                # 레짐 조건부 체크 (R20/R21 우선)
                 exit_ctx = self._check_regime_exit(ticker, pos, snap, regime)
                 if exit_ctx["should_exit"]:
                     regime_sell.append({
@@ -292,50 +329,34 @@ class D2SBacktestV3(D2SBacktestV2):
                         "reason": exit_ctx["reason"],
                         "score": 0,
                         "market_score": 0,
+                        "signal_regime": regime,  # 결정 레짐 저장 (통계용)
                     })
                     self._r20_r21_applied[regime] = (
                         self._r20_r21_applied.get(regime, 0) + 1
                     )
 
-            signals = non_sell + regime_sell
+            new_signals = non_sell + regime_sell
 
-            # ── R18: 조기 손절 시그널 추가 ────────────────────
-            already_selling = {s["ticker"] for s in signals if s["action"] == "SELL"}
+            # R18: 조기 손절 시그널 추가
+            already_selling = {s["ticker"] for s in new_signals if s["action"] == "SELL"}
             for ticker, pos in list(self.positions.items()):
                 if ticker in already_selling:
                     continue
                 r18_reason = self._check_r18_exit(ticker, pos, snap)
                 if r18_reason:
-                    signals.append({
+                    new_signals.append({
                         "action": "SELL",
                         "ticker": ticker,
                         "size": 1.0,
                         "reason": r18_reason,
                         "score": 0,
+                        "signal_regime": regime,
                     })
                     self._r18_count += 1
 
-            # 매도 먼저
-            for sig in signals:
-                if sig["action"] == "SELL":
-                    pnl = self._execute_sell(sig["ticker"], sig["size"], snap, sig["reason"])
-                    if sig["ticker"] not in self.positions:
-                        self.position_meta.pop(sig["ticker"], None)
-                        self._regime_exits[regime].append(pnl.pnl_pct if pnl is not None else 0)
+            pending_signals = new_signals
 
-            # 매수
-            for sig in signals:
-                if sig["action"] == "BUY":
-                    trade = self._execute_buy(
-                        sig["ticker"], sig["size"], snap,
-                        sig["reason"], sig.get("score", 0),
-                    )
-                    if trade:
-                        daily_buy_counts[sig["ticker"]] = (
-                            daily_buy_counts.get(sig["ticker"], 0) + 1
-                        )
-
-            # SPY streak 업데이트
+            # ── [C] SPY streak 업데이트 (오늘 종가 기반) ─────────────
             spy_pct = snap.changes.get("SPY", 0)
             if spy_pct > 0:
                 spy_streak += 1
@@ -344,7 +365,7 @@ class D2SBacktestV3(D2SBacktestV2):
                 spy_streak = 0
                 self._spy_down_streak += 1
 
-            # 자산 스냅샷
+            # ── [D] 자산 스냅샷 (오늘 종가 기준) ─────────────────────
             equity = self.cash + sum(
                 snap.closes.get(t, pos.entry_price) * pos.qty
                 for t, pos in self.positions.items()

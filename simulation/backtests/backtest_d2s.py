@@ -80,12 +80,14 @@ class D2SBacktest:
         end_date: date = date(2026, 2, 17),
         use_fees: bool = True,
         data_path: "Path | None" = None,       # None이면 market_daily.parquet 사용
+        slippage_pct: float = 0.05,            # 시가 체결 슬리피지 (기본 0.05%)
     ):
         self.params = params or D2S_ENGINE
         self.start_date = start_date
         self.end_date = end_date
         self.use_fees = use_fees
         self.data_path = data_path
+        self.slippage_pct = slippage_pct
 
         self.engine = D2SEngine(self.params)
         self.preprocessor = TechnicalPreprocessor(self.params)
@@ -231,10 +233,11 @@ class D2SBacktest:
         self, ticker: str, size: float, snap: DailySnapshot,
         reason: str, score: float,
     ) -> TradeRecord | None:
-        """매수를 실행한다."""
-        price = snap.closes.get(ticker, 0)
+        """매수를 실행한다. 시가(open)에 체결 + 슬리피지 적용."""
+        price = snap.opens.get(ticker, snap.closes.get(ticker, 0))
         if price <= 0 or self.cash <= 0:
             return None
+        price *= (1 + self.slippage_pct / 100)
 
         amount = self.cash * size
         amount = min(amount, self.cash)
@@ -276,14 +279,15 @@ class D2SBacktest:
     def _execute_sell(
         self, ticker: str, size: float, snap: DailySnapshot, reason: str,
     ) -> TradeRecord | None:
-        """매도를 실행한다."""
+        """매도를 실행한다. 시가(open)에 체결 + 슬리피지 적용."""
         pos = self.positions.get(ticker)
         if not pos:
             return None
 
-        price = snap.closes.get(ticker, 0)
+        price = snap.opens.get(ticker, snap.closes.get(ticker, 0))
         if price <= 0:
             return None
+        price *= (1 - self.slippage_pct / 100)
 
         sell_qty = pos.qty * size
         proceeds = sell_qty * price
@@ -314,7 +318,12 @@ class D2SBacktest:
     # ------------------------------------------------------------------
 
     def run(self, verbose: bool = True) -> "D2SBacktest":
-        """백테스트를 실행한다."""
+        """백테스트를 실행한다.
+
+        Look-ahead bias 수정:
+          T일 종가로 시그널 결정 → pending_signals에 저장
+          T+1일 시가에 체결 (slippage 포함)
+        """
         df, tech, poly = self._load_data()
 
         # 거래일 목록
@@ -326,60 +335,61 @@ class D2SBacktest:
         ]
 
         if verbose:
-            print(f"\n[3/3] D2S 백테스트 실행")
+            print(f"\n[3/3] D2S 백테스트 실행 (look-ahead bias 수정)")
             print(f"  기간: {trading_dates[0]} ~ {trading_dates[-1]} ({len(trading_dates)}일)")
             print(f"  초기 자본: ${self.initial_capital:,.0f}")
+            print(f"  슬리피지: {self.slippage_pct}%")
             print()
 
         # SPY 연속 상승 / riskoff 연속 추적
         spy_streak = 0
         riskoff_streak = 0
 
+        # T일 결정 → T+1일 시가에 체결
+        pending_signals: list[dict] = []
+
         for i, td in enumerate(trading_dates):
             snap = self._build_snapshot(td, tech, poly, spy_streak, riskoff_streak)
             if snap is None:
                 continue
 
-            # 당일 매수 횟수 추적
+            # 당일 체결 매수 횟수 추적 (dca_max_daily 체크용)
             daily_buy_counts: dict[str, int] = {}
 
-            # 시그널 생성
-            signals = self.engine.generate_daily_signals(
+            # ── [A] 전날 결정 시그널을 오늘 시가에 체결 ────────────
+            if pending_signals:
+                # 매도 먼저
+                for sig in pending_signals:
+                    if sig["action"] == "SELL":
+                        self._execute_sell(
+                            sig["ticker"], sig["size"], snap, sig["reason"],
+                        )
+
+                # 당일 신규 진입 총합 cap (§12-3: ≤ 자본 30%)
+                daily_entry_cap = self.params.get("daily_new_entry_cap", 1.0)
+                daily_entry_used = 0.0
+
+                for sig in pending_signals:
+                    if sig["action"] == "BUY":
+                        entry_fraction = sig["size"]
+                        if daily_entry_used + entry_fraction > daily_entry_cap:
+                            continue
+                        trade = self._execute_buy(
+                            sig["ticker"], sig["size"], snap,
+                            sig["reason"], sig.get("score", 0),
+                        )
+                        if trade:
+                            daily_entry_used += entry_fraction
+                            daily_buy_counts[sig["ticker"]] = (
+                                daily_buy_counts.get(sig["ticker"], 0) + 1
+                            )
+
+            # ── [B] 오늘 종가 데이터로 시그널 결정 (내일 실행 예약) ──
+            pending_signals = self.engine.generate_daily_signals(
                 snap, self.positions, daily_buy_counts,
             )
 
-            # 시그널 실행 (매도 먼저, 매수 후)
-            for sig in signals:
-                if sig["action"] == "SELL":
-                    self._execute_sell(
-                        sig["ticker"], sig["size"], snap, sig["reason"],
-                    )
-
-            # 당일 신규 진입 총합 cap 추적 (§12-3: ≤ 자본 30%)
-            daily_entry_cap = self.params.get("daily_new_entry_cap", 1.0)
-            daily_entry_used = 0.0
-            capital_for_cap = self.cash + sum(
-                snap.closes.get(t, pos.entry_price) * pos.qty
-                for t, pos in self.positions.items()
-            )
-
-            for sig in signals:
-                if sig["action"] == "BUY":
-                    # cap 초과 시 진입 건너뜀
-                    entry_fraction = sig["size"]
-                    if daily_entry_used + entry_fraction > daily_entry_cap:
-                        continue
-                    trade = self._execute_buy(
-                        sig["ticker"], sig["size"], snap,
-                        sig["reason"], sig.get("score", 0),
-                    )
-                    if trade:
-                        daily_entry_used += entry_fraction
-                        daily_buy_counts[sig["ticker"]] = (
-                            daily_buy_counts.get(sig["ticker"], 0) + 1
-                        )
-
-            # SPY streak 업데이트
+            # ── [C] SPY streak 업데이트 (오늘 종가 기반) ─────────────
             spy_pct = snap.changes.get("SPY", 0)
             if spy_pct > 0:
                 spy_streak += 1
@@ -393,7 +403,7 @@ class D2SBacktest:
             else:
                 riskoff_streak = 0
 
-            # 자산 스냅샷
+            # ── [D] 자산 스냅샷 (오늘 종가 기준) ─────────────────────
             equity = self.cash + sum(
                 snap.closes.get(t, pos.entry_price) * pos.qty
                 for t, pos in self.positions.items()

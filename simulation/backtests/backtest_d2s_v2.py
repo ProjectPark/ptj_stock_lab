@@ -160,7 +160,7 @@ class D2SBacktestV2(D2SBacktest):
     # ------------------------------------------------------------------
 
     def run(self, verbose: bool = True) -> "D2SBacktestV2":
-        """v2 백테스트 실행 — R18 조기 손절 포함."""
+        """v2 백테스트 실행 — R18 조기 손절 포함 (look-ahead bias 수정)."""
         df, tech, poly = self._load_data()
 
         all_dates = sorted(df.index)
@@ -171,7 +171,7 @@ class D2SBacktestV2(D2SBacktest):
         ]
 
         if verbose:
-            print(f"\n[3/3] D2S v2 백테스트 실행")
+            print(f"\n[3/3] D2S v2 백테스트 실행 (look-ahead bias 수정)")
             print(f"  기간: {trading_dates[0]} ~ {trading_dates[-1]} ({len(trading_dates)}일)")
             print(f"  초기 자본: ${self.initial_capital:,.0f}")
             print(f"  R17 V-바운스 임계: %B<{self.params['vbounce_bb_threshold']} "
@@ -184,6 +184,9 @@ class D2SBacktestV2(D2SBacktest):
 
         spy_streak = 0
 
+        # T일 결정 → T+1일 시가에 체결
+        pending_signals: list[dict] = []
+
         for i, td in enumerate(trading_dates):
             snap = self._build_snapshot(td, tech, poly, spy_streak)
             if snap is None:
@@ -191,19 +194,47 @@ class D2SBacktestV2(D2SBacktest):
 
             daily_buy_counts: dict[str, int] = {}
 
+            # ── [A] 전날 결정 시그널을 오늘 시가에 체결 ────────────
+            if pending_signals:
+                # 매도 먼저
+                for sig in pending_signals:
+                    if sig["action"] == "SELL":
+                        self._execute_sell(sig["ticker"], sig["size"], snap, sig["reason"])
+                        if sig["ticker"] not in self.positions:
+                            self.position_meta.pop(sig["ticker"], None)
+
+                # 매수 (daily_entry_cap 체크 포함)
+                daily_entry_cap = self.params.get("daily_new_entry_cap", 1.0)
+                daily_entry_used = 0.0
+                for sig in pending_signals:
+                    if sig["action"] == "BUY":
+                        entry_fraction = sig["size"]
+                        if daily_entry_used + entry_fraction > daily_entry_cap:
+                            continue
+                        trade = self._execute_buy(
+                            sig["ticker"], sig["size"], snap,
+                            sig["reason"], sig.get("score", 0),
+                        )
+                        if trade:
+                            daily_entry_used += entry_fraction
+                            daily_buy_counts[sig["ticker"]] = (
+                                daily_buy_counts.get(sig["ticker"], 0) + 1
+                            )
+
+            # ── [B] 오늘 종가 데이터로 시그널 결정 (내일 실행 예약) ──
             # 기본 시그널 생성 (엔진 — R1~R16)
-            signals = self.engine.generate_daily_signals(
+            new_signals = self.engine.generate_daily_signals(
                 snap, self.positions, daily_buy_counts,
             )
 
-            # ── R18: 조기 손절 시그널 추가 ──
-            already_selling = {s["ticker"] for s in signals if s["action"] == "SELL"}
+            # R18: 조기 손절 시그널 추가
+            already_selling = {s["ticker"] for s in new_signals if s["action"] == "SELL"}
             for ticker, pos in list(self.positions.items()):
                 if ticker in already_selling:
                     continue
                 r18_reason = self._check_r18_exit(ticker, pos, snap)
                 if r18_reason:
-                    signals.append({
+                    new_signals.append({
                         "action": "SELL",
                         "ticker": ticker,
                         "size": 1.0,
@@ -212,31 +243,13 @@ class D2SBacktestV2(D2SBacktest):
                     })
                     self._r18_count += 1
 
-            # 매도 먼저
-            for sig in signals:
-                if sig["action"] == "SELL":
-                    self._execute_sell(sig["ticker"], sig["size"], snap, sig["reason"])
-                    # 포지션 청산 시 메타 제거
-                    if sig["ticker"] not in self.positions:
-                        self.position_meta.pop(sig["ticker"], None)
+            pending_signals = new_signals
 
-            # 매수
-            for sig in signals:
-                if sig["action"] == "BUY":
-                    trade = self._execute_buy(
-                        sig["ticker"], sig["size"], snap,
-                        sig["reason"], sig.get("score", 0),
-                    )
-                    if trade:
-                        daily_buy_counts[sig["ticker"]] = (
-                            daily_buy_counts.get(sig["ticker"], 0) + 1
-                        )
-
-            # SPY streak 업데이트
+            # ── [C] SPY streak 업데이트 (오늘 종가 기반) ─────────────
             spy_pct = snap.changes.get("SPY", 0)
             spy_streak = spy_streak + 1 if spy_pct > 0 else 0
 
-            # 자산 스냅샷
+            # ── [D] 자산 스냅샷 (오늘 종가 기준) ─────────────────────
             equity = self.cash + sum(
                 snap.closes.get(t, pos.entry_price) * pos.qty
                 for t, pos in self.positions.items()

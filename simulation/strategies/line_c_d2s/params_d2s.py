@@ -131,40 +131,102 @@ D2S_ENGINE_V2 = {
 # D2S 엔진 파라미터 v3 — backtest_d2s_v3.py 전용
 # ============================================================
 # v2 대비 추가/변경:
-#   R20: 레짐 조건부 take_profit (bull=5.9%, bear=5.0%)
-#   R21: 레짐 조건부 hold_days   (bull=7일, bear=4일)
-#   레짐 감지: SPY streak + SPY SMA 기반 bull/bear/neutral 분류
-#   근거: Study 5 — Axis 4 IS -16.73%p vs OOS +25.97%p 레짐 역설 해소
+#   R19: BB 진입 하드 필터 (%B > 0.30 → 진입 금지, Study G F2: +12.3%p OOS +13.2%p)
+#   R20: 레짐 조건부 take_profit (bull=5.0%, bear=6.5%)  ← Optuna #449 역전
+#   R21: 레짐 조건부 hold_days   (bull=12일, bear=8일)   ← Optuna #449
+#   레짐 감지: SPY streak(5/1) + SMA12(±1.1%/1.5%) + Polymarket BTC(0.55/0.35)
+#   근거: Study 5 + D2S v3 Regime Optuna #449 (IS +33.68% / OOS +62.42%, Sharpe 2.22/1.46)
+#
+# Optuna #449 최적화 기간:
+#   IS: 2024-09-18 ~ 2025-05-31  |  OOS: 2025-06-01 ~ 2026-02-17 (no-ROBN 1.5년)
 D2S_ENGINE_V3 = {
     **D2S_ENGINE_V2,  # v2 파라미터 전체 계승
 
-    # ── v3 신규: R20/R21 레짐 감지 ──────────────────────────
-    "regime_enabled": True,               # 레짐 조건부 청산 활성화
-
-    # 레짐 감지 — SPY streak 기반
-    "regime_bull_spy_streak": 3,          # SPY N일+ 연속 상승 → Bull 레짐
-    "regime_bear_spy_streak": 2,          # SPY N일+ 연속 하락 → Bear 레짐
-
-    # 레짐 감지 — SPY SMA 기반 (선택적 강화)
-    "regime_spy_sma_period": 20,          # SPY SMA 기준 기간
-    "regime_spy_sma_bull_pct": 1.0,       # SPY > SMA + N% → Bull 확신
-    "regime_spy_sma_bear_pct": -1.0,      # SPY < SMA - N% → Bear 확신
-
-    # ── v3 신규: R20 레짐 조건부 take_profit ────────────────
-    "bull_take_profit_pct": 5.9,          # Bull 레짐 이익실현 (기존 유지)
-    "bear_take_profit_pct": 5.0,          # Bear/Neutral 레짐 이익실현 (Study H 최적)
-
-    # ── v3 신규: R21 레짐 조건부 hold_days ──────────────────
-    "bull_hold_days_max": 7,              # Bull 레짐 최대 보유 (기존 유지)
-    "bear_hold_days_max": 4,              # Bear/Neutral 레짐 최대 보유 (Study H 최적)
-
-    # ── v3: Polymarket BTC 레짐 신호 ────────────────────────
-    "regime_btc_bull_threshold": 0.60,    # poly_btc_up > 0.60 → Risk-on(Bull 가중)
-    "regime_btc_bear_threshold": 0.40,    # poly_btc_up < 0.40 → Risk-off(Bear 가중)
-
-    # ── v3 추가: BB 진입 하드 필터 (Study G F2 후보 R19) ────
+    # ── v3 신규: R19 BB 진입 하드 필터 (Study G F2) ─────────
     "bb_entry_hard_max": 0.30,            # %B > 0.30 → 진입 금지 (Study G: +12.3%p, OOS +13.2%p)
     "bb_entry_hard_filter": True,         # R19 필터 활성화 여부
+
+    # ── v3 신규: 레짐 감지 활성화 ───────────────────────────
+    "regime_enabled": True,               # 레짐 조건부 청산 활성화
+
+    # 레짐 감지 — SPY streak 기반 (Optuna #449)
+    "regime_bull_spy_streak": 5,          # 3 → 5 (Optuna: bull 판정 보수화)
+    "regime_bear_spy_streak": 1,          # 2 → 1 (Optuna: bear 판정 민감화)
+
+    # 레짐 감지 — SPY SMA 기반 (Optuna #449)
+    "regime_spy_sma_period": 12,          # 20 → 12 (단기 SMA 반응성 향상)
+    "regime_spy_sma_bull_pct": 1.1,       # 1.0 → 1.1 (Optuna)
+    "regime_spy_sma_bear_pct": -1.5,      # -1.0 → -1.5 (Optuna: bear 판정 강화)
+
+    # 레짐 감지 — Polymarket BTC (Optuna #449)
+    "regime_btc_bull_threshold": 0.55,    # 0.60 → 0.55 (Risk-on 민감화)
+    "regime_btc_bear_threshold": 0.35,    # 0.40 → 0.35 (Risk-off 보수화)
+
+    # ── v3 신규: R20 레짐 조건부 take_profit (Optuna #449 역전) ─
+    # ※ Optuna 결과: bull에서도 5.0%가 최적 (빠른 익절이 전반적으로 유리)
+    "bull_take_profit_pct": 5.0,          # 5.9 → 5.0 (Optuna 역전 결과)
+    "bear_take_profit_pct": 6.5,          # 5.0 → 6.5 (Optuna: bear는 더 기다림)
+
+    # ── v3 신규: R21 레짐 조건부 hold_days (Optuna #449) ────
+    "bull_hold_days_max": 12,             # 7 → 12 (Optuna: bull은 더 길게)
+    "bear_hold_days_max": 8,              # 4 → 8  (Optuna: bear도 일부 연장)
+    "optimal_hold_days_max": 12,          # fallback: bull_hold_days_max 기준
+
+    # ── Optuna #449 최적값 — 시황 필터 오버라이드 ───────────
+    "gld_suppress_threshold": 0.5,        # 1.0 → 0.5 (GLD 억제 민감화)
+    "btc_up_max": 0.7,                    # 0.75 → 0.7
+    "robn_pct_max": 2.5,                  # 2.1 → 2.5
+    "gap_bank_conl_max": 5.0,             # 6.3 → 5.0 (쌍둥이 갭 상한 강화)
+    "spy_bearish_threshold": -1.25,       # -1.0 → -1.25
+
+    # R14 그라데이션 (Optuna #449)
+    "riskoff_spy_min_threshold": -2.8,    # -1.5 → -2.8 (패닉 구간 확장)
+    "riskoff_gld_optimal_min": 0.7,       # 0.5 → 0.7
+    "riskoff_spy_optimal_max": -0.6,      # -0.5 → -0.6
+    "riskoff_consecutive_boost": 2,       # 3 → 2 (연속 리스크오프 기준 완화)
+    "riskoff_panic_size_factor": 0.6,     # 0.5 → 0.6
+
+    # market_score 게이트 (Optuna #449)
+    "market_score_suppress": 0.45,        # 0.40 → 0.45 (진입 기준 강화)
+    "market_score_entry_b": 0.7,          # 0.55 → 0.7
+    "market_score_entry_a": 0.8,          # 0.60 → 0.8
+    "market_score_weights": {             # w_gld=0.25,w_spy=0.15,w_riskoff=0.2,
+        "gld_score":     0.2273,          # w_streak=0.2,w_vol=0.2,w_btc=0.1 → normalize
+        "spy_score":     0.1364,          # total=1.1 기준 정규화
+        "riskoff_score": 0.1818,
+        "streak_score":  0.1818,
+        "vol_score":     0.1818,
+        "btc_score":     0.0909,
+    },
+
+    # ── Optuna #449 최적값 — 기술적 지표 오버라이드 ─────────
+    "rsi_entry_min": 37,                  # 40 → 37 (RSI 진입 하한 완화)
+    "rsi_entry_max": 69,                  # 60 → 69 (RSI 진입 상한 확대)
+    "rsi_danger_zone": 76,                # 80 → 76 (RSI 위험 기준 강화)
+    "bb_entry_max": 0.4,                  # 0.6 → 0.4 (BB 진입 상한 강화)
+    "bb_danger_zone": 1.1,                # 1.0 → 1.1
+    "atr_high_quantile": 0.65,            # 0.75 → 0.65 (ATR Q4 기준 완화)
+    "vol_entry_min": 1.1,                 # 1.2 → 1.1
+    "vol_entry_max": 3.5,                 # 2.0 → 3.5 (상대 거래량 허용 범위 확대)
+
+    # ── Optuna #449 최적값 — 진입 조건 오버라이드 ───────────
+    "contrarian_entry_threshold": -0.5,   # 0.0 → -0.5 (역발상 기준 강화)
+    "amdl_friday_contrarian_threshold": -3.0,  # -1.5 → -3.0 (AMDL 금요일 기준 강화)
+
+    # ── Optuna #449 최적값 — V-바운스(R17) 파라미터 ─────────
+    "vbounce_bb_threshold": 0.2,          # 0.15 → 0.2 (V-바운스 발동 구간 확대)
+    "vbounce_crash_threshold": -12.0,     # -10.0 → -12.0 (더 큰 충격만 발동)
+    "vbounce_score_threshold": 0.9,       # 0.87 → 0.9
+    "vbounce_size_multiplier": 2.5,       # 2.0 → 2.5
+
+    # ── Optuna #449 최적값 — 조기 손절(R18) 파라미터 ────────
+    "early_stoploss_days": 2,             # 3 → 2 (더 빠른 손절 판단)
+    "early_stoploss_recovery": 3.0,       # 2.0 → 3.0 (V-바운스 성공 기준 상향)
+
+    # ── Optuna #449 최적값 — 자금/DCA 오버라이드 ────────────
+    "buy_size_large": 0.1,                # 0.15 → 0.1 (기본 매수 비중 축소)
+    "daily_new_entry_cap": 0.15,          # 0.30 → 0.15 (일일 신규 진입 한도 강화)
+    "dca_max_daily": 2,                   # 5 → 2 (일일 동일종목 매수 횟수 제한)
 }
 
 # ============================================================

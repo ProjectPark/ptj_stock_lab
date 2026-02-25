@@ -1,13 +1,18 @@
 """
 D2S 엔진 — 실거래 행동 추출 기반 일봉 전략
 ============================================
-trading_rules_attach_v1.md의 16개 규칙(R1~R16)을 구현.
+trading_rules_attach_v2.md의 R1~R19 규칙을 구현.
 953건 실거래 D2S(Discretionary-to-Systematic) 분석에서 추출.
 
 2026-02-24: Study A/B/C 반영
   - Study A: R14 그라데이션 (4단계: panic/basic/optimal/super)
   - Study B: 종목별 역발상 차별화 (MSTU/ROBN/CONL/AMDL)
   - Study C: market_score 0차 게이트 (6개 시황 신호 통합)
+
+2026-02-25: v2/v3 규칙 엔진 통합
+  - R17: 충격 V-바운스 포지션 확대 (check_entry_quality + generate_daily_signals)
+  - R19: BB 진입 하드 필터 (%B > hard_max → 진입 금지, check_technical_filter)
+  ※ R18(조기 손절), R20(레짐 TP), R21(레짐 HD)는 포지션 상태 필요 → backtest 클래스 처리
 
 일봉(daily) 단위로 작동하며, 기술적 지표(RSI, MACD, BB, ATR)를
 직접 계산한다 (외부 TA 라이브러리 의존 없음).
@@ -375,6 +380,14 @@ class D2SEngine:
             return {"blocked": True, "reason": f"R8: BB%B {bb:.2f} > {self.p['bb_danger_zone']}",
                     "combo_optimal": False, "atr_boost": False}
 
+        # R19: BB 하드 진입 필터 (Study G F2 — %B > hard_max → 진입 금지)
+        if self.p.get("bb_entry_hard_filter", False):
+            hard_max = self.p.get("bb_entry_hard_max", 0.30)
+            if bb is not None and bb > hard_max:
+                return {"blocked": True,
+                        "reason": f"R19: BB%B {bb:.2f} > hard_max {hard_max}",
+                        "combo_optimal": False, "atr_boost": False}
+
         # R9: MACD 콤보 최적 (MACD bullish + RSI 40~60 + Vol 1.2~2.0x)
         rsi_in_range = (rsi is not None
                         and self.p["rsi_entry_min"] <= rsi <= self.p["rsi_entry_max"])
@@ -491,7 +504,18 @@ class D2SEngine:
         score = min(score, 1.0)
         size_hint = "large" if score >= 0.7 else "small"
 
-        return {"score": score, "size_hint": size_hint, "reasons": reasons}
+        # R17: V-바운스 발동 조건 감지 (%B < threshold + crash < threshold + score ≥ threshold)
+        vbounce = False
+        if self.p.get("vbounce_bb_threshold") is not None:
+            crash = snap.changes.get(ticker, 0.0)
+            vbounce = (
+                bb is not None
+                and bb < self.p.get("vbounce_bb_threshold", 0.2)
+                and crash < self.p.get("vbounce_crash_threshold", -12.0)
+                and score >= self.p.get("vbounce_score_threshold", 0.9)
+            )
+
+        return {"score": score, "size_hint": size_hint, "reasons": reasons, "vbounce": vbounce}
 
     # ------------------------------------------------------------------
     # 청산 판단 (R4, R5)
@@ -623,6 +647,7 @@ class D2SEngine:
                 "score": quality["score"],
                 "size_hint": quality["size_hint"],
                 "reasons": quality["reasons"],
+                "vbounce": quality.get("vbounce", False),
             })
 
         # 단독 역발상 진입 — 종목 하락 + 기술적 유리 + 미스커버 종목
@@ -650,6 +675,7 @@ class D2SEngine:
                     "score": quality["score"],
                     "size_hint": quality["size_hint"],
                     "reasons": quality["reasons"],
+                    "vbounce": quality.get("vbounce", False),
                 })
 
         # 리스크오프 매수 — 갭/단독 후보가 없어도 강제 진입
@@ -672,6 +698,7 @@ class D2SEngine:
                         "score": quality["score"],
                         "size_hint": quality["size_hint"],
                         "reasons": quality["reasons"],
+                        "vbounce": quality.get("vbounce", False),
                     })
 
         # 점수 순 정렬, 상위 3개만
@@ -680,6 +707,14 @@ class D2SEngine:
             base_size = (self.p["buy_size_large"]
                          if cand["size_hint"] == "large"
                          else self.p["buy_size_small"])
+
+            # R17: V-바운스 발동 시 포지션 확대
+            if cand.get("vbounce"):
+                multiplier = self.p.get("vbounce_size_multiplier", 2.5)
+                size_cap = self.p.get("vbounce_size_max", 0.30)
+                base_size = min(base_size * multiplier, size_cap)
+                cand["reasons"].append(f"R17:vbounce×{multiplier}")
+
             size = round(base_size * size_factor, 4)
             signals.append({
                 "action": "BUY",
@@ -688,6 +723,7 @@ class D2SEngine:
                 "reason": f"{cand['source']} | {', '.join(cand['reasons'])}",
                 "score": cand["score"],
                 "market_score": market_score,
+                "vbounce": cand.get("vbounce", False),
             })
 
         return signals

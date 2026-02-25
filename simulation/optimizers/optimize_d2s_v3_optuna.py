@@ -153,8 +153,8 @@ def define_search_space(trial: optuna.Trial) -> dict:
     spy_streak_max = trial.suggest_int("spy_streak_max",           2, 5)
     spy_bearish_th = trial.suggest_float("spy_bearish_threshold",  -2.0, -0.5, step=0.25)
 
-    rsi_entry_min = trial.suggest_int("rsi_entry_min",   25, 55)
-    rsi_entry_max = trial.suggest_int("rsi_entry_max",   50, 80)
+    rsi_entry_min = trial.suggest_int("rsi_entry_min",   25, 50)  # max 50 (rsi_entry_max와 겹침 방지)
+    rsi_entry_max = trial.suggest_int("rsi_entry_max",   55, 80)  # min 55 (min과 5pt gap 보장)
     rsi_danger    = trial.suggest_int("rsi_danger_zone", 70, 90)
     bb_entry_max  = trial.suggest_float("bb_entry_max",   0.3, 1.0, step=0.1)
     bb_danger     = trial.suggest_float("bb_danger_zone", 0.9, 1.2, step=0.1)

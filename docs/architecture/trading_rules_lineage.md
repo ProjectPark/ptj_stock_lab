@@ -1,6 +1,6 @@
 # Trading Rules 문서 계보 (Lineage)
 
-> 작성일: 2026-02-21 | 최종 갱신: 2026-02-23
+> 작성일: 2026-02-21 | 최종 갱신: 2026-02-25
 > 목적: 모든 매매 규칙/전략 문서의 전체 목록과 관계를 한곳에 정리하여 꼬이지 않게 관리
 
 ---
@@ -21,7 +21,7 @@
   → 정식 rules 문서: ❌ 없음 (rules 작성 시까지 코드 수정 금지)
 
 [C. 행동 추출 라인 (D2S)] ───────────────────────────────────────
-  docs/rules/line_c/     attach v1, attach v2
+  docs/rules/line_c/     attach v1, attach v2, attach v3
   simulation/strategies/line_c_d2s/   d2s_engine.py, params_d2s.py
 
 [D. 장기 거래내역 라인 (2023~2026)] ─────────────────────────────
@@ -218,6 +218,13 @@
 |---|---|---|
 | `trading_rules_attach_v1.md` | D2S R1~R16, 953건 통계 분석 | 완료 |
 | `trading_rules_attach_v2.md` | R17 V-바운스, R18 조기 손절, DCA 강화 | 완료 |
+| `trading_rules_attach_v3.md` | 레짐 감지(R20/R21) + BB 하드 필터(R19) + Optuna #449 전체 | 완료 (Study 6~9B 검증) |
+
+### C-3b. 관련 리포트
+
+| 파일 | 위치 |
+|---|---|
+| `d2s_v3_study_report.md` | `docs/reports/backtest/` |
 
 ### C-4. 구현 코드 (`simulation/strategies/line_c_d2s/`)
 
@@ -298,3 +305,4 @@ docs/notes/ (아이디어) → docs/rules/ (확정) → simulation/strategies/ (
 | 2026-02-21 | 초기 작성 — A/B/C/D 4개 라인 + 전체 파일 목록 |
 | 2026-02-23 | MT_VNQ2/VNQ3 반영 — 지시서 2개, 노트 2개 추가 + 인프라 모듈 7개(B-3) + 코드 미대응 7개 추가 |
 | 2026-02-23 | 4-line 리팩터링 — docs/ + code/ 전면 재편, jab_seth 삭제, notes→rules→code 거버넌스 |
+| 2026-02-25 | LineC attach v3 추가 — 레짐 감지(R19~R21) + Optuna #449 + Study 6~9B 검증 |

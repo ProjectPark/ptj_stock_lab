@@ -139,6 +139,10 @@ D2S_ENGINE_V2 = {
 #
 # Optuna #449 최적화 기간:
 #   IS: 2024-09-18 ~ 2025-05-31  |  OOS: 2025-06-01 ~ 2026-02-17 (no-ROBN 1.5년)
+# 추가 검증 완료 (2026-02-25): Study 6~9B
+#   Study 6 ROBN 1년: v3 +57.34% vs v2 -1.83%
+#   Study 7 IS 구간: v3_IS Sharpe 3.463 (승률 100%)
+#   Study 9B weights: v3_current OOS 1위 → weights 확정
 D2S_ENGINE_V3 = {
     **D2S_ENGINE_V2,  # v2 파라미터 전체 계승
 
@@ -233,6 +237,7 @@ D2S_ENGINE_V3 = {
 # D2S 엔진 파라미터 v3 No-ROBN — ROBN 제외 1.5년 테스트 전용
 # ============================================================
 # MSTU 상장일 기준 (2024-09-18 ~): ROBN은 2025-01-31 상장으로 3종목만 사용
+# Study 8B 검증 완료 (2026-02-25): 레짐 방법 6종 비교 → v3_3signal 유지 결론
 # ticker_weights: ROBN 30% → CONL/MSTU/AMDL 균등 재배분
 # twin_pairs: bank_CONL(lead=ROBN) 제거
 D2S_ENGINE_V3_NO_ROBN = {

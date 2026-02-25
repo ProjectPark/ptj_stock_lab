@@ -19,9 +19,11 @@ Usage:
 """
 from __future__ import annotations
 
+import os
 import sys
 from copy import deepcopy
 from datetime import date
+from multiprocessing import Pool
 from pathlib import Path
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -369,15 +371,25 @@ DATE_FULL_END   = date(2026, 2, 17)
 DATE_IS_END     = date(2025, 9, 30)
 DATE_OOS_START  = date(2025, 10, 1)
 
+N_JOBS = int(os.environ.get("N_JOBS", "20"))
+
+
+def _run_scenario_task(args: tuple) -> dict:
+    """multiprocessing.Pool 용 래퍼."""
+    name, config, label, start, end = args
+    r = run_scenario(name, config, start_date=start, end_date=end)
+    r["period_label"] = label
+    return r
+
 
 def run_period_set(label: str, start: date, end: date) -> list[dict]:
-    results = []
-    for name, config in SCENARIOS.items():
-        r = run_scenario(name, config, start_date=start, end_date=end)
-        r["period_label"] = label
-        results.append(r)
+    combos = [(name, config, label, start, end) for name, config in SCENARIOS.items()]
+    n_workers = min(N_JOBS, len(combos))
+    with Pool(n_workers) as pool:
+        results = pool.map(_run_scenario_task, combos)
+    for r in results:
         print(
-            f"    [{label}] {name}: 수익률 {r['total_return']:+.2f}%, "
+            f"    [{label}] {r['scenario']}: 수익률 {r['total_return']:+.2f}%, "
             f"승률 {r['win_rate']}%, MDD {r['mdd']:.1f}%, 매수 {r['buy_trades']}건"
         )
     return results

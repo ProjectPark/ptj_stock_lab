@@ -1435,6 +1435,141 @@ class BacktestEngineV5(BacktestBase):
         print("=" * 70)
 
     # ----------------------------------------------------------
+    # Equity chart
+    # ----------------------------------------------------------
+    def plot_equity_curve(self) -> Path | None:
+        """자산 곡선 + 투입원금 + Drawdown PNG 생성."""
+        if not self.equity_curve:
+            return None
+
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+        import matplotlib.dates as mdates
+
+        dates = [e[0] for e in self.equity_curve]
+        vals = [e[1] for e in self.equity_curve]
+
+        # 투입원금 시계열 구성 (injection_log 기반)
+        injection_dates = {d: amt for d, amt in self.injection_log}
+        invested_ts = []
+        running_invested = self.initial_capital_krw
+        for d in dates:
+            if d in injection_dates:
+                running_invested += injection_dates[d]
+            invested_ts.append(running_invested)
+
+        has_injection = bool(self.injection_log)
+        n_panels = 3 if has_injection else 2
+        ratios = [3, 2, 1] if has_injection else [3, 1]
+
+        fig, axes = plt.subplots(
+            n_panels, 1, figsize=(14, 4 * n_panels),
+            height_ratios=ratios, sharex=True,
+        )
+        fig.suptitle(
+            "PTJ v5 Backtest — Capital Injection" if has_injection
+            else "PTJ v5 Backtest — Equity Curve",
+            fontsize=14, fontweight="bold",
+        )
+
+        ax_eq = axes[0]
+
+        # ── Panel 1: Equity curve + 투입원금 ──
+        ax_eq.plot(dates, vals, linewidth=1.4, color="#2196F3", label="Total Equity")
+        if has_injection:
+            ax_eq.plot(
+                dates, invested_ts, linewidth=1.2, color="#FF9800",
+                linestyle="--", label="Invested Capital",
+            )
+            ax_eq.fill_between(
+                dates, invested_ts, vals,
+                where=[v >= ic for v, ic in zip(vals, invested_ts)],
+                alpha=0.12, color="green", label="Profit",
+            )
+            ax_eq.fill_between(
+                dates, invested_ts, vals,
+                where=[v < ic for v, ic in zip(vals, invested_ts)],
+                alpha=0.12, color="red", label="Loss",
+            )
+            # 입금 시점 마커
+            for inj_d, inj_amt in self.injection_log:
+                if inj_d in dates:
+                    idx = dates.index(inj_d)
+                    ax_eq.annotate(
+                        "", xy=(inj_d, vals[idx]),
+                        xytext=(inj_d, vals[idx] * 0.97),
+                        arrowprops=dict(arrowstyle="->", color="#FF9800", lw=1.0),
+                    )
+        else:
+            ax_eq.axhline(
+                y=self.initial_capital_krw, color="gray", linestyle="--",
+                alpha=0.5, label=f"Initial ${self.initial_capital_krw:,.0f}",
+            )
+            ax_eq.fill_between(
+                dates, self.initial_capital_krw, vals,
+                where=[v >= self.initial_capital_krw for v in vals],
+                alpha=0.12, color="green",
+            )
+            ax_eq.fill_between(
+                dates, self.initial_capital_krw, vals,
+                where=[v < self.initial_capital_krw for v in vals],
+                alpha=0.12, color="red",
+            )
+
+        ax_eq.set_ylabel("Portfolio Value ($)")
+        ax_eq.legend(loc="upper left", fontsize=9)
+        ax_eq.grid(True, alpha=0.3)
+
+        # ── Panel 2 (injection only): 투입원금 대비 수익률 ──
+        if has_injection:
+            ax_ret = axes[1]
+            ret_pct = [
+                (v - ic) / ic * 100 if ic > 0 else 0.0
+                for v, ic in zip(vals, invested_ts)
+            ]
+            ax_ret.plot(dates, ret_pct, linewidth=1.0, color="#4CAF50")
+            ax_ret.axhline(y=0, color="gray", linestyle="-", alpha=0.4)
+            ax_ret.fill_between(
+                dates, 0, ret_pct,
+                where=[r >= 0 for r in ret_pct],
+                alpha=0.15, color="green",
+            )
+            ax_ret.fill_between(
+                dates, 0, ret_pct,
+                where=[r < 0 for r in ret_pct],
+                alpha=0.15, color="red",
+            )
+            ax_ret.set_ylabel("Return vs Invested (%)")
+            ax_ret.grid(True, alpha=0.3)
+
+        # ── Last Panel: Drawdown ──
+        ax_dd = axes[-1]
+        peak = vals[0]
+        dd_pcts = []
+        for v in vals:
+            if v > peak:
+                peak = v
+            dd_pcts.append(-((peak - v) / peak * 100))
+        ax_dd.fill_between(dates, 0, dd_pcts, color="red", alpha=0.3)
+        ax_dd.plot(dates, dd_pcts, color="red", linewidth=0.8)
+        ax_dd.set_ylabel("Drawdown (%)")
+        ax_dd.set_xlabel("Date")
+        ax_dd.grid(True, alpha=0.3)
+
+        for ax in axes:
+            ax.xaxis.set_major_formatter(mdates.DateFormatter("%Y-%m"))
+        fig.autofmt_xdate()
+
+        suffix = "_injection" if has_injection else ""
+        out = config.CHART_DIR / f"backtest_v5_equity{suffix}.png"
+        out.parent.mkdir(parents=True, exist_ok=True)
+        fig.savefig(out, dpi=150, bbox_inches="tight")
+        plt.close(fig)
+        print(f"  차트 저장: {out}")
+        return out
+
+    # ----------------------------------------------------------
     # Save trade log CSV
     # ----------------------------------------------------------
     def save_trade_log(self) -> Path | None:

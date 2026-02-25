@@ -15,9 +15,11 @@ Usage:
 """
 from __future__ import annotations
 
+import os
 import sys
 from copy import deepcopy
 from datetime import date, timedelta
+from multiprocessing import Pool
 from pathlib import Path
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -163,6 +165,8 @@ DATE_OOS_START  = date(2025, 10, 1)
 TAKE_PROFIT_GRID = [4.0, 4.5, 5.0, 5.9, 6.5, 7.5, 8.5]
 HOLD_DAYS_GRID   = [4, 5, 6, 7, 8, 10]
 
+N_JOBS = int(os.environ.get("N_JOBS", "20"))
+
 
 def run_bt(take_profit: float, hold_days: int, start: date, end: date) -> dict:
     params = deepcopy(D2S_ENGINE_V2)
@@ -187,6 +191,14 @@ def run_bt(take_profit: float, hold_days: int, start: date, end: date) -> dict:
     }
 
 
+def _run_bt_task(args: tuple) -> dict:
+    """multiprocessing.Pool 용 래퍼."""
+    tp, hd, period_name, pstart, pend = args
+    r = run_bt(tp, hd, pstart, pend)
+    r["period"] = period_name
+    return r
+
+
 def phase2_grid() -> None:
     print("\n" + "=" * 65)
     print("  Phase 2 Grid — take_profit × hold_days 2D 파라미터 서치")
@@ -201,21 +213,20 @@ def phase2_grid() -> None:
     # baseline 값 먼저 기록
     baseline = {"take_profit": 5.9, "hold_days": 7}
 
-    all_results: list[dict] = []
+    combos = [
+        (tp, hd, period_name, pstart, pend)
+        for tp in TAKE_PROFIT_GRID
+        for hd in HOLD_DAYS_GRID
+        for period_name, pstart, pend in periods
+    ]
+    total = len(combos)
+    n_workers = min(N_JOBS, total)
+    print(f"    {total}개 조합 × {n_workers} workers 병렬 실행...")
 
-    total = len(TAKE_PROFIT_GRID) * len(HOLD_DAYS_GRID) * len(periods)
-    done = 0
-    for tp in TAKE_PROFIT_GRID:
-        for hd in HOLD_DAYS_GRID:
-            for period_name, pstart, pend in periods:
-                r = run_bt(tp, hd, pstart, pend)
-                r["period"] = period_name
-                all_results.append(r)
-                done += 1
-                if done % 10 == 0:
-                    print(f"    진행: {done}/{total}")
+    with Pool(n_workers) as pool:
+        all_results = pool.map(_run_bt_task, combos)
 
-    print(f"    완료: {done}/{total}\n")
+    print(f"    완료: {len(all_results)}/{total}\n")
 
     # 결과 DataFrame
     res_df = pd.DataFrame(all_results)

@@ -48,16 +48,16 @@ RESULTS_DIR = _PROJECT_ROOT / "data" / "results" / "backtests"
 # ── 실행 기간 정의 ─────────────────────────────────────────────
 PERIODS = [
     {
-        "label":      "FULL",
-        "note":       "실거래 기간 일치 (ROBN 워밍업 부족 가능)",
-        "start_date": date(2025, 2, 19),
-        "end_date":   date(2026, 2, 12),
+        "label": "FULL",
+        "note":  "실거래 기간 일치 (ROBN 워밍업 부족 가능)",
+        "start": date(2025, 2, 19),
+        "end":   date(2026, 2, 12),
     },
     {
-        "label":      "WARM",
-        "note":       "기술적 지표 워밍업 확보 (실거래 +12일)",
-        "start_date": date(2025, 3, 3),
-        "end_date":   date(2026, 2, 12),
+        "label": "WARM",
+        "note":  "기술적 지표 워밍업 확보 (실거래 +12일)",
+        "start": date(2025, 3, 3),
+        "end":   date(2026, 2, 12),
     },
 ]
 

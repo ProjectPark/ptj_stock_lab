@@ -849,3 +849,84 @@ IS 기간 (2025-03~09 상승장):
 | **`experiments/study_1layer_backtest.py`** | **Axis 1 백테스트 검증 — IS/OOS 분리** |
 | **`experiments/study_trailing_stop.py`** | **Axis 2 EDA — 트레일링 스탑 효과 분석** |
 | **`experiments/study_exit_params.py`** | **Axis 4 EDA+Grid — 청산 파라미터 최적화** |
+| **`experiments/study_5_regime_detection.py`** | **Study 5 — 레짐 감지 스터디 (SPY+SMA+Polymarket)** |
+| **`backtests/backtest_d2s_v3.py`** | **D2S v3 백테스트 (R19+R20+R21 레짐 조건부)** |
+| **`optimizers/optimize_d2s_v3_regime_optuna.py`** | **D2S v3 Regime Optuna (IS+OOS 동시, ~45 파라미터)** |
+
+---
+
+## 부록 I. Study 5 — 레짐 감지 스터디 설계 (2026-02-25)
+
+> 이 부록은 v2 확정 규칙이 아닌 **스터디 설계서**다. v3 후보 규칙 R19/R20/R21 검증 목적.
+
+### I-1. 스터디 동기
+
+부록 H(Axis 4) 핵심 역설:
+- `hd=4, tp=5.0%` → OOS **+25.97%p** (기준 -20.1% → +5.87%) — 하락장 방어
+- `hd=4, tp=5.0%` → IS **-16.73%p** — 상승장 기회 손실
+
+→ **레짐 조건부 청산**으로 해소: Bull(상승장) = hd7/tp5.9%, Bear(하락장) = hd4/tp5.0%
+
+### I-2. 레짐 감지 3차원 신호
+
+| 신호 | 근거 | 기존 규칙 |
+|---|---|---|
+| **SPY streak** | N일+ 연속 상승 → Bull, N일+ 연속 하락 → Bear | R13 (spy_streak_max) |
+| **SPY SMA** | 종가 > SMA+1% → Bull 확신, 종가 < SMA-1% → Bear 확신 | 신규 |
+| **Polymarket BTC up** | btc_up > 0.60 → Risk-on(Bull), < 0.40 → Risk-off(Bear) | R3 (btc_up_max/min) |
+
+**복합 판정**: 3개 신호 중 2개 이상 일치 → 최종 레짐 확정 (다수결)
+
+> Polymarket 데이터는 이미 R3(진입 억제)에서 활용 중. 레짐 감지에도 재활용 → 추가 데이터 불필요.
+
+### I-3. v3 후보 규칙
+
+```
+[R19 후보 — BB 진입 하드 필터]
+  조건: %B > 0.30 → 진입 금지 (전 진입 유형 공통)
+  근거: Study G F2 — FULL +12.3%p, OOS +13.2%p, MDD -8.5%p
+
+[R20 후보 — 레짐 조건부 take_profit]
+  Bull 레짐: take_profit = 5.9% (기존 유지)
+  Bear/Neutral 레짐: take_profit = 5.0% (Study H 최적)
+  레짐 감지: SPY streak + SMA + Polymarket BTC (3차원 다수결)
+
+[R21 후보 — 레짐 조건부 hold_days]
+  Bull 레짐: hold_days = 7일 (기존 유지)
+  Bear/Neutral 레짐: hold_days = 4일 (Study H 최적)
+  근거: OOS +25.97%p 개선 (hd=4, IS -16.73%p 트레이드오프 해소)
+```
+
+### I-4. 검증 계획
+
+| 단계 | 내용 | 스크립트 |
+|---|---|---|
+| Phase 1 EDA | IS/OOS 레짐 분포 + Polymarket 차원 분석 | `study_5_regime_detection.py --phase 1` |
+| Phase 2 Grid | 레짐 임계값 × 청산 파라미터 2D 탐색 | `study_5_regime_detection.py --phase 2` |
+| Phase 3 검증 | 최적 조합 IS/OOS + R19 시너지 | `study_5_regime_detection.py --phase 3` |
+| Optuna | ~45 파라미터 IS+OOS 동시 500 trials | `optimize_d2s_v3_regime_optuna.py` |
+
+### I-5. Optuna 개선 사항 (v3 vs v2)
+
+| 항목 | v2 Optuna | v3 Regime Optuna |
+|---|---|---|
+| 탐색 파라미터 | ~35개 | **~45개** (+10개 신규) |
+| 스코어 함수 | IS Sharpe만 | **IS+OOS Sharpe 동시** (OOS 2배 가중) |
+| OOS 과적합 방지 | 없음 | **OOS 2배 가중으로 일반화 유도** |
+| 신규 파라미터 | — | R19(bb_hard_max/filter) + R20(bull/bear_tp) + R21(bull/bear_hd) + 레짐 감지 6개 |
+| SLURM | 12h, 20 CPU | **16h, 20 CPU** (IS+OOS 2배 연산) |
+
+### I-6. SLURM 제출 방법
+
+```bash
+# 로컬 테스트 (Study 5 Phase 1 EDA)
+pyenv shell ptj_stock_lab && python experiments/study_5_regime_detection.py --phase 1
+
+# Study 5 Grid (Phase 2, 로컬 4 workers)
+pyenv shell ptj_stock_lab && python experiments/study_5_regime_detection.py --phase 2 --n-jobs 4
+
+# SLURM 제출 (Optuna 500 trials, 20 workers)
+/slurm-submit optimize_d2s_v3_regime
+```
+
+> SLURM 제출 시 `slurm/profiles/optimize_d2s_v3_regime.conf` 사용.

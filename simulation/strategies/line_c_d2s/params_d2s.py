@@ -126,3 +126,67 @@ D2S_ENGINE_V2 = {
     # ── v2 강화: DCA 레이어 제한 ──────────────────────────────
     "dca_max_layers": 2,                  # 최대 DCA 레이어 (3레이어: 승률 27%)
 }
+
+# ============================================================
+# D2S 엔진 파라미터 v3 — backtest_d2s_v3.py 전용
+# ============================================================
+# v2 대비 추가/변경:
+#   R20: 레짐 조건부 take_profit (bull=5.9%, bear=5.0%)
+#   R21: 레짐 조건부 hold_days   (bull=7일, bear=4일)
+#   레짐 감지: SPY streak + SPY SMA 기반 bull/bear/neutral 분류
+#   근거: Study 5 — Axis 4 IS -16.73%p vs OOS +25.97%p 레짐 역설 해소
+D2S_ENGINE_V3 = {
+    **D2S_ENGINE_V2,  # v2 파라미터 전체 계승
+
+    # ── v3 신규: R20/R21 레짐 감지 ──────────────────────────
+    "regime_enabled": True,               # 레짐 조건부 청산 활성화
+
+    # 레짐 감지 — SPY streak 기반
+    "regime_bull_spy_streak": 3,          # SPY N일+ 연속 상승 → Bull 레짐
+    "regime_bear_spy_streak": 2,          # SPY N일+ 연속 하락 → Bear 레짐
+
+    # 레짐 감지 — SPY SMA 기반 (선택적 강화)
+    "regime_spy_sma_period": 20,          # SPY SMA 기준 기간
+    "regime_spy_sma_bull_pct": 1.0,       # SPY > SMA + N% → Bull 확신
+    "regime_spy_sma_bear_pct": -1.0,      # SPY < SMA - N% → Bear 확신
+
+    # ── v3 신규: R20 레짐 조건부 take_profit ────────────────
+    "bull_take_profit_pct": 5.9,          # Bull 레짐 이익실현 (기존 유지)
+    "bear_take_profit_pct": 5.0,          # Bear/Neutral 레짐 이익실현 (Study H 최적)
+
+    # ── v3 신규: R21 레짐 조건부 hold_days ──────────────────
+    "bull_hold_days_max": 7,              # Bull 레짐 최대 보유 (기존 유지)
+    "bear_hold_days_max": 4,              # Bear/Neutral 레짐 최대 보유 (Study H 최적)
+
+    # ── v3: Polymarket BTC 레짐 신호 ────────────────────────
+    "regime_btc_bull_threshold": 0.60,    # poly_btc_up > 0.60 → Risk-on(Bull 가중)
+    "regime_btc_bear_threshold": 0.40,    # poly_btc_up < 0.40 → Risk-off(Bear 가중)
+
+    # ── v3 추가: BB 진입 하드 필터 (Study G F2 후보 R19) ────
+    "bb_entry_hard_max": 0.30,            # %B > 0.30 → 진입 금지 (Study G: +12.3%p, OOS +13.2%p)
+    "bb_entry_hard_filter": True,         # R19 필터 활성화 여부
+}
+
+# ============================================================
+# D2S 엔진 파라미터 v3 No-ROBN — ROBN 제외 1.5년 테스트 전용
+# ============================================================
+# MSTU 상장일 기준 (2024-09-18 ~): ROBN은 2025-01-31 상장으로 3종목만 사용
+# ticker_weights: ROBN 30% → CONL/MSTU/AMDL 균등 재배분
+# twin_pairs: bank_CONL(lead=ROBN) 제거
+D2S_ENGINE_V3_NO_ROBN = {
+    **D2S_ENGINE_V3,
+
+    # ── ROBN 제외 종목 유니버스 ─────────────────────────────
+    "tickers": ["CONL", "MSTU", "AMDL"],
+    "ticker_weights": {"CONL": 0.33, "MSTU": 0.34, "AMDL": 0.33},
+
+    # ── twin_pairs: bank_CONL(lead=ROBN) 제거 ─────────────
+    "twin_pairs": {
+        "coin_MSTU": {"lead": "BITU", "follow": "MSTU"},
+        "coin_CONL": {"lead": "BITU", "follow": "CONL"},
+        "semi_AMDL": {"lead": "NVDL", "follow": "AMDL"},
+    },
+
+    # ── ROBN 전용 규칙 비활성화 ────────────────────────────
+    "robn_riskoff_momentum_boost": False,
+}

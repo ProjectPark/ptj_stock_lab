@@ -40,6 +40,12 @@ from simulation.strategies.line_c_d2s.params_d2s import D2S_ENGINE
 BUY_FEE_PCT = 0.35     # 매수 수수료 (수수료 0.25% + 환전 0.10%)
 SELL_FEE_PCT = 0.353    # 매도 수수료 (수수료 0.25% + SEC 0.003% + 환전 0.10%)
 
+# ============================================================
+# 프로세스 내 parquet RAM 캐시 (Optuna 다중 trial 재로드 방지)
+# ============================================================
+# key: str(market_path), value: (df_raw, poly)
+# 동일 프로세스에서 2번째 trial부터 disk I/O 생략
+_DATA_CACHE: dict = {}
 
 # Polymarket 로더는 backtest_common.load_polymarket_daily를 사용
 
@@ -96,7 +102,11 @@ class D2SBacktest:
     # ------------------------------------------------------------------
 
     def _load_data(self) -> tuple[pd.DataFrame, dict[str, pd.DataFrame], dict]:
-        """market_daily + Polymarket 데이터를 로드한다."""
+        """market_daily + Polymarket 데이터를 로드한다.
+
+        동일 프로세스 내 2번째 호출부터는 _DATA_CACHE에서 원시 DataFrame+poly를 반환.
+        기술적 지표(tech)는 params-dependent이므로 매번 계산.
+        """
         data_dir = _PROJECT_ROOT / "data"
         if self.data_path is not None:
             market_path = self.data_path
@@ -104,19 +114,43 @@ class D2SBacktest:
             market_path = data_dir / "market" / "daily" / "market_daily.parquet"
         poly_dir = data_dir / "polymarket"
 
-        print("[1/3] 데이터 로드")
-        df = pd.read_parquet(market_path)
-        print(f"  market_daily: {df.shape[0]} days, {len(set(c[0] for c in df.columns))} tickers")
+        cache_key = str(market_path)
+        if cache_key not in _DATA_CACHE:
+            print("[1/3] 데이터 로드")
+            df = pd.read_parquet(market_path)
+            poly = backtest_common.load_polymarket_daily(poly_dir)
+            if not poly:
+                print("  ⚠️ Polymarket 데이터 없음 → BITU 등락률 기반 btc_up 폴백 생성")
+                poly = self._build_bitu_fallback(df)
+            _DATA_CACHE[cache_key] = (df, poly)
+            print(f"  market_daily: {df.shape[0]} days, {len(set(c[0] for c in df.columns))} tickers  (RAM 캐시 저장)")
+        else:
+            df, poly = _DATA_CACHE[cache_key]
 
-        # 기술적 지표 계산
+        # 기술적 지표: params-dependent → 캐시 불가, 매 trial 계산
         print("[2/3] 기술적 지표 계산")
         tech = self.preprocessor.compute(df)
         print(f"  {len(tech)} tickers processed")
 
-        # Polymarket (backtest_common의 파서 재사용)
-        poly = backtest_common.load_polymarket_daily(poly_dir)
-
         return df, tech, poly
+
+    def _build_bitu_fallback(self, df: pd.DataFrame) -> dict:
+        """BITU 일일 등락률을 pseudo btc_up 확률로 변환한다."""
+        try:
+            bitu_close = df[("BITU", "Close")]
+        except KeyError:
+            return {}
+        bitu_pct = bitu_close.pct_change() * 100
+        poly = {}
+        for ts, pct in bitu_pct.items():
+            if pd.isna(pct):
+                continue
+            d = ts.date() if hasattr(ts, "date") else ts
+            # BITU 등락률 → sigmoid-like 변환: [-5%, +5%] → [0.30, 0.70]
+            btc_up = float(np.clip(0.50 + pct / 25.0, 0.30, 0.70))
+            poly[d] = {"btc_up": round(btc_up, 3)}
+        print(f"    BITU 폴백: {len(poly)}일 생성")
+        return poly
 
     # ------------------------------------------------------------------
     # 스냅샷 빌드

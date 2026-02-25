@@ -49,12 +49,14 @@ class D2SBacktestV2(D2SBacktest):
         start_date: date = date(2025, 3, 3),
         end_date: date = date(2026, 2, 17),
         use_fees: bool = True,
+        data_path=None,
     ):
         super().__init__(
             params=params or D2S_ENGINE_V2,
             start_date=start_date,
             end_date=end_date,
             use_fees=use_fees,
+            data_path=data_path,
         )
         # BB 하단 돌파 포지션 메타 — ticker → breach_date
         self.position_meta: dict[str, date | None] = {}

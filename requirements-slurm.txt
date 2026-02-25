@@ -1,0 +1,11 @@
+# SLURM 백테스트/최적화 전용 패키지 (streamlit, alpaca, yfinance 등 제외)
+numpy>=2.0.0
+pandas>=2.0.0
+pyarrow>=14.0.0
+optuna>=3.5.0
+scipy>=1.11.0
+matplotlib>=3.8.0
+tqdm>=4.65.0
+PyYAML>=6.0
+python-dateutil>=2.9.0
+pytz>=2024.1

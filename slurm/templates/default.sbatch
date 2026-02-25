@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --job-name=ptj-{{PROFILE}}
-#SBATCH --account=taehyun
+#SBATCH --account={{ACCOUNT}}
 #SBATCH --partition={{PARTITION}}
 #SBATCH --cpus-per-task={{SBATCH_CPUS}}
 #SBATCH --mem={{SBATCH_MEM}}
@@ -8,12 +8,12 @@
 #SBATCH --output={{REMOTE_DIR}}/slurm/logs/%j.out
 #SBATCH --error={{REMOTE_DIR}}/slurm/logs/%j.err
 
-set -e
-cd {{RUN_DIR}}
-source {{REMOTE_DIR}}/data/.venv/bin/activate
-
 echo "[$(date)] Start: {{SCRIPT}} {{SCRIPT_ARGS}}"
-python {{SCRIPT}} {{SCRIPT_ARGS}}
-EXIT_CODE=$?
-echo "[$(date)] Done. exit=$EXIT_CODE"
-exit $EXIT_CODE
+
+srun \
+  --container-image={{REMOTE_DIR}}/slurm/images/ptj_stock_lab.sqsh \
+  --container-mounts={{RUN_DIR}}:/workspace,{{REMOTE_DIR}}/data:/workspace/data \
+  --container-workdir=/workspace \
+  python {{SCRIPT}} {{SCRIPT_ARGS}}
+
+echo "[$(date)] Done. exit=$?"

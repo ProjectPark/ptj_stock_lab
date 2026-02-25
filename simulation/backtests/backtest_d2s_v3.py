@@ -2,20 +2,21 @@
 """
 D2S 백테스트 v3 — 레짐 감지 + 조건부 청산 파라미터
 ====================================================
-trading_rules_attach_v2.md Study 5(부록 I) 근거:
-  R20: 레짐 조건부 take_profit (bull=5.9%, bear=5.0%)
-  R21: 레짐 조건부 hold_days   (bull=7일, bear=4일)
-  R19: BB 진입 하드 필터 (%B > 0.30 → 진입 금지)
+trading_rules_attach_v3.md (Optuna #449 반영) 근거:
+  R19: BB 진입 하드 필터 (%B > 0.30 → 진입 금지, Study G F2: OOS +13.2%p)
+  R20: 레짐 조건부 take_profit (Bull=5.0%, Bear=6.5%)  ← Optuna #449 역전 발견
+  R21: 레짐 조건부 hold_days   (Bull=12일, Bear=8일)   ← Optuna #449
 
-레짐 감지 방법 (3차원):
-  - SPY streak 기반: N일+ 연속 상승 → Bull, N일+ 연속 하락 → Bear
-  - SPY SMA 기반: SPY > SMA+1% → Bull 확신, SPY < SMA-1% → Bear 확신
-  - Polymarket BTC 확률 기반: btc_up > 0.60 → Risk-on(Bull 강화), < 0.40 → Risk-off(Bear 강화)
-  - 복합 판정: streak + SMA + Polymarket 3차원 통합
+레짐 감지 방법 (3차원 다수결):
+  - SPY streak 기반: ≥5일 연속 상승 → Bull, ≥1일 연속 하락 → Bear
+  - SPY SMA12 기반: SPY > SMA+1.1% → Bull, SPY < SMA-1.5% → Bear
+  - Polymarket BTC 확률: btc_up > 0.55 → Bull, btc_up < 0.35 → Bear
+  - 복합 판정: 3개 신호 중 2개 이상 일치 → 레짐 확정 (다수결)
 
-핵심 근거 (Study H / Axis 4):
-  hd=4, tp=5.0% → OOS +25.97%p (기준 대비), IS -16.73%p (bull market 기회 손실)
-  → 레짐 조건부 적용으로 IS/OOS 트레이드오프 해소
+검증 결과 (Optuna #449, no-ROBN 1.5년):
+  IS  2024-09-18 ~ 2025-05-31: +33.68%, MDD -9.2%, Sharpe 2.220
+  OOS 2025-06-01 ~ 2026-02-17: +62.42%, MDD -16.0%, Sharpe 1.461
+  전체 (1.5년): +118.05%, MDD -16.0%, Sharpe 1.506
 
 Usage:
     pyenv shell ptj_stock_lab && python simulation/backtests/backtest_d2s_v3.py

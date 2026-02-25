@@ -57,6 +57,10 @@ def main():
 
     win_id, is_start, is_end, oos_start, oos_end = RECENT_IS_WINDOW
 
+    # --study-name 전달 시 win_id 오버라이드 (d2s_v3_ 접두사 자동 제거)
+    if args.study_name and args.study_name != f"d2s_v3_{win_id}":
+        win_id = args.study_name.removeprefix("d2s_v3_")
+
     print("=" * 70)
     print("  D2S 최근 레짐 IS 최적화 (B-1)")
     print(f"  IS: {is_start} ~ {is_end}  ({(is_end - is_start).days}일)")

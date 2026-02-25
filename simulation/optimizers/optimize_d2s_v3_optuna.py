@@ -119,18 +119,18 @@ def calc_score(report: dict) -> float:
 # ============================================================
 
 def define_search_space(trial: optuna.Trial) -> dict:
-    suppress   = trial.suggest_float("market_score_suppress", 0.25, 0.50, step=0.05)
+    suppress   = trial.suggest_float("market_score_suppress", 0.15, 0.45, step=0.05)
     entry_b_low = round(suppress + 0.05, 2)
     entry_b    = trial.suggest_float("market_score_entry_b", entry_b_low, 0.70, step=0.05)
     entry_a_low = round(entry_b + 0.05, 2)
     entry_a    = trial.suggest_float("market_score_entry_a", entry_a_low, 0.80, step=0.05)
 
-    w_gld     = trial.suggest_float("w_gld",     0.10, 0.35, step=0.05)
-    w_spy     = trial.suggest_float("w_spy",     0.05, 0.25, step=0.05)
-    w_riskoff = trial.suggest_float("w_riskoff", 0.15, 0.40, step=0.05)
-    w_streak  = trial.suggest_float("w_streak",  0.05, 0.25, step=0.05)
-    w_vol     = trial.suggest_float("w_vol",     0.05, 0.25, step=0.05)
-    w_btc     = trial.suggest_float("w_btc",     0.05, 0.20, step=0.05)
+    w_gld     = trial.suggest_float("w_gld",     0.05, 0.35, step=0.05)
+    w_spy     = trial.suggest_float("w_spy",     0.05, 0.30, step=0.05)
+    w_riskoff = trial.suggest_float("w_riskoff", 0.05, 0.30, step=0.05)
+    w_streak  = trial.suggest_float("w_streak",  0.05, 0.30, step=0.05)
+    w_vol     = trial.suggest_float("w_vol",     0.05, 0.30, step=0.05)
+    w_btc     = trial.suggest_float("w_btc",     0.00, 0.15, step=0.05)
     w_total   = w_gld + w_spy + w_riskoff + w_streak + w_vol + w_btc
     market_score_weights = {
         "gld_score":     round(w_gld     / w_total, 4),
@@ -153,16 +153,16 @@ def define_search_space(trial: optuna.Trial) -> dict:
     spy_streak_max = trial.suggest_int("spy_streak_max",           2, 5)
     spy_bearish_th = trial.suggest_float("spy_bearish_threshold",  -2.0, -0.5, step=0.25)
 
-    rsi_entry_min = trial.suggest_int("rsi_entry_min",   30, 50)
-    rsi_entry_max = trial.suggest_int("rsi_entry_max",   55, 75)
+    rsi_entry_min = trial.suggest_int("rsi_entry_min",   25, 55)
+    rsi_entry_max = trial.suggest_int("rsi_entry_max",   50, 80)
     rsi_danger    = trial.suggest_int("rsi_danger_zone", 70, 90)
-    bb_entry_max  = trial.suggest_float("bb_entry_max",   0.4, 0.8, step=0.1)
+    bb_entry_max  = trial.suggest_float("bb_entry_max",   0.3, 1.0, step=0.1)
     bb_danger     = trial.suggest_float("bb_danger_zone", 0.9, 1.2, step=0.1)
-    atr_quantile  = trial.suggest_float("atr_high_quantile", 0.60, 0.85, step=0.05)
-    vol_entry_min = trial.suggest_float("vol_entry_min",  0.8, 1.5, step=0.1)
-    vol_entry_max = trial.suggest_float("vol_entry_max",  1.5, 3.5, step=0.5)
+    atr_quantile  = trial.suggest_float("atr_high_quantile", 0.50, 0.85, step=0.05)
+    vol_entry_min = trial.suggest_float("vol_entry_min",  0.5, 1.5, step=0.1)
+    vol_entry_max = trial.suggest_float("vol_entry_max",  1.5, 5.0, step=0.5)
 
-    contrarian_th = trial.suggest_float("contrarian_entry_threshold",       -1.5, 0.0, step=0.5)
+    contrarian_th = trial.suggest_float("contrarian_entry_threshold",       -2.0, 0.5, step=0.5)
     amdl_th       = trial.suggest_float("amdl_friday_contrarian_threshold", -3.0, -0.5, step=0.5)
 
     take_profit   = trial.suggest_float("take_profit_pct",       3.0, 10.0, step=0.5)
@@ -476,13 +476,16 @@ def main():
     parser = argparse.ArgumentParser(description="D2S Optuna v3")
     parser.add_argument("--mode",     choices=["wf", "ext_is"], default="wf",
                         help="wf=Walk-Forward, ext_is=Extended IS (Option B)")
-    parser.add_argument("--n-trials", type=int, default=200,
+    parser.add_argument("--window",   type=str, default=None,
+                        help="개별 창 실행 (W1, W2, W3). 미지정 시 전체 순차 실행")
+    parser.add_argument("--n-trials", type=int, default=600,
                         help="창당 Optuna trial 수")
     parser.add_argument("--n-jobs",   type=int, default=20,
                         help="병렬 워커 수")
     args = parser.parse_args()
 
-    print(f"\nD2S Optuna v3 — mode={args.mode}, trials={args.n_trials}, jobs={args.n_jobs}")
+    print(f"\nD2S Optuna v3 — mode={args.mode}, window={args.window}, "
+          f"trials={args.n_trials}, jobs={args.n_jobs}")
     print(f"데이터: {DATA_PATH_3Y}")
 
     if not DATA_PATH_3Y.exists():
@@ -492,21 +495,39 @@ def main():
     optuna.logging.set_verbosity(optuna.logging.WARNING)
 
     if args.mode == "wf":
-        # Walk-Forward: 3창 순차 실행
-        results = []
-        for win_id, is_start, is_end, oos_start, oos_end in WF_WINDOWS:
+        # --window 지정 시 해당 창만 실행 (병렬 SLURM 제출용)
+        if args.window:
+            win_map = {w[0]: w for w in WF_WINDOWS}
+            if args.window not in win_map:
+                print(f"[ERROR] --window {args.window} 없음. 사용 가능: {list(win_map.keys())}")
+                sys.exit(1)
+            win_id, is_start, is_end, oos_start, oos_end = win_map[args.window]
             result = _optimize_window(
                 win_id, is_start, is_end, oos_start, oos_end,
                 n_trials=args.n_trials, n_jobs=args.n_jobs,
             )
-            results.append(result)
-        _print_wf_summary(results)
+            print(f"\n[{win_id} 완료]")
+            print(f"  IS:  wr={result['is_report']['win_rate']:.1f}%  "
+                  f"ret={result['is_report']['total_return_pct']:+.2f}%  "
+                  f"sharpe={result['is_report']['sharpe_ratio']:.3f}")
+            print(f"  OOS: wr={result['oos_report'].get('win_rate', 0):.1f}%  "
+                  f"ret={result['oos_report'].get('total_return_pct', 0):+.2f}%  "
+                  f"MDD={result['oos_report'].get('mdd_pct', 0):.2f}%")
+        else:
+            # 전체 순차 실행 (레거시)
+            results = []
+            for win_id, is_start, is_end, oos_start, oos_end in WF_WINDOWS:
+                result = _optimize_window(
+                    win_id, is_start, is_end, oos_start, oos_end,
+                    n_trials=args.n_trials, n_jobs=args.n_jobs,
+                )
+                results.append(result)
+            _print_wf_summary(results)
 
-        # 통합 결과 저장
-        summary_path = RESULTS_DIR / "d2s_v3_wf_summary.json"
-        with open(summary_path, "w", encoding="utf-8") as f:
-            json.dump(results, f, ensure_ascii=False, indent=2, default=str)
-        print(f"WF 통합 결과 저장: {summary_path.name}")
+            summary_path = RESULTS_DIR / "d2s_v3_wf_summary.json"
+            with open(summary_path, "w", encoding="utf-8") as f:
+                json.dump(results, f, ensure_ascii=False, indent=2, default=str)
+            print(f"WF 통합 결과 저장: {summary_path.name}")
 
     else:  # ext_is
         result = _optimize_window(

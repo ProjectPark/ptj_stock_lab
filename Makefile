@@ -120,8 +120,9 @@ run-remote:
 #   make slurm-log PROFILE=backtest_v5               # 실행 중 로그 tail
 #   make slurm-clean                                 # 완료된 모든 run dir 정리
 
-PARTITION     ?= all
+PARTITION     ?= titanx
 ACCOUNT       ?= default
+SBATCH_MEM    ?= 120G
 ARGS          ?=
 SLURM_POLL    ?= 30
 
@@ -194,6 +195,7 @@ slurm-submit:
 	@if [ ! -f slurm/jobs/$(PROFILE).rundir ]; then echo "Error: slurm/jobs/$(PROFILE).rundir not found. slurm-push 먼저 실행하세요."; exit 1; fi
 	@echo ">>> [slurm-submit] Profile: $(PROFILE)"
 	@. slurm/profiles/$(PROFILE).conf && \
+	  SBATCH_MEM=$${SBATCH_MEM:-$(SBATCH_MEM)} && \
 	  RUN_DIR=$$(cat slurm/jobs/$(PROFILE).rundir) && \
 	  _ARGS="$(ARGS)" && \
 	  EFFECTIVE_ARGS="$${_ARGS:-$$SCRIPT_ARGS}" && \

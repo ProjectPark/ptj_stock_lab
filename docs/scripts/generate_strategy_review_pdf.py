@@ -12,9 +12,9 @@ from fpdf import FPDF
 
 # Paths
 ROOT = Path(__file__).resolve().parent.parent.parent
-MD_PATH = ROOT / "docs" / "notes" / "line_b" / "review" / "taejun_strategy_review_2026-02-23_VNQ.md"
+MD_PATH = ROOT / "docs" / "notes" / "line_b" / "review" / "taejun_strategy_review_2026-03-01_VNQ.md"
 PDF_DIR = ROOT / "docs" / "pdf"
-PDF_PATH = PDF_DIR / "taejun_strategy_review_2026-02-23_VNQ.pdf"
+PDF_PATH = PDF_DIR / "taejun_strategy_review_2026-03-01_VNQ.pdf"
 
 # Font: AppleSDGothicNeo (한글+영문 지원, TTC에서 추출)
 _TTC_PATH = "/System/Library/Fonts/AppleSDGothicNeo.ttc"
@@ -41,7 +41,7 @@ class StrategyPDF(FPDF):
     def header(self):
         self.set_font("SD", size=8)
         self.set_text_color(130, 130, 130)
-        self.cell(0, 6, "taejun_attach_pattern — 전략 리뷰 2026-02-23 (VNQ)", align="R")
+        self.cell(0, 6, "taejun_attach_pattern — 전략 리뷰 2026-03-01 (VNQ)", align="R")
         self.ln(8)
 
     def footer(self):

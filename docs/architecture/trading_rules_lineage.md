@@ -119,12 +119,12 @@
 
 ### B-4. 정식 rules 문서 (`docs/rules/line_b/`)
 
-❌ **없음** — 노트 9개 + 지시서 5개가 산재. 어느 것이 최종본인지 불명확.
-
-승격 예정:
-- `taejun_vnq_trading_rules_v1.md` → VNQ 관련 코드 수정 허용
-- `taejun_xly_trading_rules_v1.md` → XLY 관련 코드 수정 허용
-- `taejun_sk_trading_rules_v1.md` → SK 관련 코드 수정 허용
+| 파일 | 기준 | 상태 |
+|------|------|------|
+| `taejun_vnq_trading_rules_v1.md` | MT_VNQ3 (2026-02-23) | 구버전 (v2로 대체) |
+| `taejun_vnq_trading_rules_v2.md` | MT_VNQ8~13 (2026-02-26) | ✅ **최신 확정본** — P-NEW-28까지 전원 해결 |
+| `taejun_xly_trading_rules_v1.md` | — | 초안 |
+| `taejun_sk_trading_rules_v1.md` | — | 초안 |
 
 ### B-5. 구현 코드 — ⚠️ _FROZEN (rules 없이 생성됨)
 
@@ -306,3 +306,4 @@ docs/notes/ (아이디어) → docs/rules/ (확정) → simulation/strategies/ (
 | 2026-02-23 | MT_VNQ2/VNQ3 반영 — 지시서 2개, 노트 2개 추가 + 인프라 모듈 7개(B-3) + 코드 미대응 7개 추가 |
 | 2026-02-23 | 4-line 리팩터링 — docs/ + code/ 전면 재편, jab_seth 삭제, notes→rules→code 거버넌스 |
 | 2026-02-25 | LineC attach v3 추가 — 레짐 감지(R19~R21) + Optuna #449 + Study 6~9B 검증 |
+| 2026-02-27 | LineB VNQ v2 승격 — MT_VNQ8~13 통합 반영, P-NEW-28까지 전원 해결, notes→rules 이관 |

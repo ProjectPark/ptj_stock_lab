@@ -25,7 +25,7 @@ JAB_SOXL = {
         "NVDA": 0.9,
         "AMD": 0.9,
         "SMCI": 1.0,
-        "KLA": 0.8,
+        "KLAC": 0.8,
         "AMAT": 0.8,
         "AVGO": 0.55,
         "MPWR": 0.55,

@@ -99,12 +99,20 @@ class M200KillSwitch:
         if reit_result:
             triggered_conditions.append(reit_result)
 
-        triggered = len(triggered_conditions) > 0
+        # P-NEW-17 확정: 조건3(GLD 급등)/4(VIX 급등)/7(REIT_MIX 급등)은
+        # 단독으로는 즉시매도 무시. 조건1/5/6과 중첩 시에만 발동.
+        _EXEMPT_PREFIXES = ("gld_surge", "vix_spike", "reit_mix_surge")
+        non_exempt = [
+            c for c in triggered_conditions
+            if not any(c.startswith(p) for p in _EXEMPT_PREFIXES)
+        ]
+        triggered = len(non_exempt) > 0
 
         return {
             "triggered": triggered,
             "conditions": triggered_conditions,
-            "reason": " | ".join(triggered_conditions) if triggered else "",
+            "non_exempt_conditions": non_exempt,
+            "reason": " | ".join(non_exempt) if triggered else "",
         }
 
     def _check_volume_crash(self, market: "MarketData") -> str | None:

@@ -81,9 +81,23 @@ class VixGold(BaseStrategy):
     # ------------------------------------------------------------------
 
     def check_entry(self, market: MarketData) -> bool:
-        """VIX 일간 변동률 >= +10%."""
+        """E-1: VIX >= +10%  AND  E-2: Poly BTC & NASDAQ 하락 기대 둘 다 >= 30% (P-NEW-03).
+
+        Poly 데이터 없음(2024-02 이전) → E-2 생략, VIX 조건만으로 발동.
+        """
         vix_chg = market.changes.get("VIX", 0.0)
-        return vix_chg >= self.params.get("vix_spike_min", 10.0)
+        if vix_chg < self.params.get("vix_spike_min", 10.0):
+            return False
+
+        # E-2: Polymarket 하락 기대 (P-NEW-03)
+        poly_down_min = self.params.get("poly_down_min", 0.30)
+        if market.poly:
+            btc_down = 1.0 - market.poly.get("btc_up", 1.0)
+            ndx_down = 1.0 - market.poly.get("ndx_up", 1.0)
+            if btc_down < poly_down_min or ndx_down < poly_down_min:
+                return False
+
+        return True
 
     def check_exit(self, market: MarketData, position: Position) -> bool:
         """IAU/GDXU 개별 청산 조건 체크 (단일 포지션 호환용)."""

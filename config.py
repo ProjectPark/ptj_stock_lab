@@ -111,7 +111,7 @@ GOLD_TICKER = "GLD"
 # ============================================================
 PAIR_GAP_SELL_THRESHOLD = 0.3     # 페어갭 매도 기준 (%) — 이 이내로 수렴하면 매도
 PAIR_GAP_ENTRY_THRESHOLD = 1.5    # 페어갭 진입 기준 (%) — 이 이상 벌어지면 매수 검토
-STOP_LOSS_PCT = -3.0              # 손절 라인 (%)
+STOP_LOSS_PCT = -3.5              # 손절 라인 (%)  # Optuna v5_s2 best  # was: -3.0
 MAX_TRADE_AMOUNT_KRW = 20_000_000  # 최대 거래대금 (원)
 SPLIT_BUY_INTERVAL_MIN = 5        # 분할매수 간격 (분)
 
@@ -178,27 +178,27 @@ BEARISH_TICKERS_V2 = ["BRKU"]
 TOTAL_CAPITAL_USD = 15_000             # 총 투자금 $15,000
 INITIAL_BUY_USD = 2_250                # 초기 진입 금액 (15%)
 DCA_BUY_USD = 750                      # 물타기 1회 금액 (5%)
-DCA_DROP_PCT = -1.35                   # 물타기 트리거 하락률 # Optuna v4_phase1 best  # was: -0.5
+DCA_DROP_PCT = -1.8                    # 물타기 트리거 하락률 # Optuna v5_s2 best  # was: -1.35
 DCA_MAX_COUNT = 7                      # 물타기 최대 횟수
 MAX_PER_STOCK_USD = 7_500              # 종목당 최대 투입 (50%)
-STOP_LOSS_BULLISH_PCT = -16.0          # 강세장 모드 손절 라인 # Optuna v4_phase1 best  # was: -8.0
+STOP_LOSS_BULLISH_PCT = -5.5           # 강세장 모드 손절 라인 # Optuna v5_s2 best  # was: -16.0
 POLYMARKET_BULLISH_THRESHOLD = 70      # 강세장 모드 진입 기준 (%)
-MAX_HOLD_HOURS = 5                     # 기본 시간 손절 (시간)
-TAKE_PROFIT_PCT = 4.0                  # 강세장 연장 시 즉시 매도 기준 (%) # Optuna v3_phase2 best  # was: 2.0
+MAX_HOLD_HOURS = 2                     # 기본 시간 손절 (시간)  # Optuna v5_s2 best  # was: 5
+TAKE_PROFIT_PCT = 4.5                  # 강세장 연장 시 즉시 매도 기준 (%) # Optuna v5_s2 best  # was: 4.0
 BEARISH_DROP_THRESHOLD = -6.0          # 방어주 분할매수 진입 (%)
 BEARISH_BUY_DAYS = 5                   # 방어주 분할매수 기간 (일)
 BRKU_WEIGHT_PCT = 10                   # BRKU 포트폴리오 고정 비중 (%)
 
 # ── v2 매도/매수 추가 상수 ──────────────────────────────────────
-PAIR_GAP_SELL_THRESHOLD_V2 = 9.0     # 쌍둥이 매도 갭 기준 # Optuna v4_study5 best  # was: 8.8
-PAIR_SELL_FIRST_PCT = 0.80           # 1차 매도 비율 (80%)
+PAIR_GAP_SELL_THRESHOLD_V2 = 9.4     # 쌍둥이 매도 갭 기준 # Optuna v5_s2 best  # was: 9.0
+PAIR_SELL_FIRST_PCT = 0.50           # 1차 매도 비율 (50%)  # Optuna v5_s2 best  # was: 0.80
 PAIR_SELL_REMAINING_PCT = 0.30       # 잔여분 분할매도 비율 (30%)
 PAIR_SELL_INTERVAL_MIN = 5           # 분할매도 간격 (분)
 COIN_TRIGGER_PCT = 3.0               # COIN 매수 트리거 (ETHU/XXRP/SOLT 각각 +3%)
-COIN_SELL_PROFIT_PCT = 5.0           # COIN 일반 매도 순수익 기준 # Optuna v3/v4 일치  # was: 3.0
+COIN_SELL_PROFIT_PCT = 3.5           # COIN 일반 매도 순수익 기준 # Optuna v5_s2 best  # was: 5.0
 COIN_SELL_BEARISH_PCT = 0.3          # COIN 하락장 즉시 매도 순수익 기준 (+0.3%)
 CONL_TRIGGER_PCT = 3.0               # CONL 매수 트리거 (ETHU/XXRP/SOLT 각각 +3%)
-CONL_SELL_PROFIT_PCT = 2.8           # CONL 수익 실현 매도 (순수익 +2.8%)
+CONL_SELL_PROFIT_PCT = 1.5           # CONL 수익 실현 매도 (순수익 +1.5%)  # Optuna v5_s2 best  # was: 2.8
 CONL_SELL_AVG_PCT = 1.0              # CONL 매도 — 트리거 평균 하한 (+1%)
 COIN_FOLLOW_VOLATILITY_GAP = 0.5     # MSTU/IRE 선택 변동성 차이 기준 (%)
 BEARISH_POLYMARKET_THRESHOLD = 20    # 하락장 진입 — Polymarket 3조건 기준 (%)
@@ -382,21 +382,21 @@ BEARISH_TICKERS_V5 = BEARISH_TICKERS_V4
 
 # ── v5 자금 (USD 기준) ───────────────────────────────────────
 V5_TOTAL_CAPITAL = V4_TOTAL_CAPITAL
-V5_INITIAL_BUY = V4_INITIAL_BUY
-V5_DCA_BUY = V4_DCA_BUY
+V5_INITIAL_BUY = 1_000               # Optuna v5_s2 best  # was: V4_INITIAL_BUY (2250)
+V5_DCA_BUY = 250                     # Optuna v5_s2 best  # was: V4_DCA_BUY (750)
 
 # ── v5 매매 파라미터 (초기값) ───────────────────────────────────
-V5_PAIR_GAP_ENTRY_THRESHOLD = V4_PAIR_GAP_ENTRY_THRESHOLD
-V5_DCA_MAX_COUNT = V4_DCA_MAX_COUNT
-V5_MAX_PER_STOCK = V4_MAX_PER_STOCK
+V5_PAIR_GAP_ENTRY_THRESHOLD = 4.0    # Optuna v5_s2 best  # was: V4_PAIR_GAP_ENTRY_THRESHOLD (2.2)
+V5_DCA_MAX_COUNT = 3                 # Optuna v5_s2 best  # was: V4_DCA_MAX_COUNT (4)
+V5_MAX_PER_STOCK = 9_750             # Optuna v5_s2 best  # was: V4_MAX_PER_STOCK (5250)
 V5_MAX_PER_STOCK_KRW = V4_MAX_PER_STOCK_KRW
-V5_COIN_TRIGGER_PCT = V4_COIN_TRIGGER_PCT
-V5_CONL_TRIGGER_PCT = V4_CONL_TRIGGER_PCT
-V5_SPLIT_BUY_INTERVAL_MIN = V4_SPLIT_BUY_INTERVAL_MIN
+V5_COIN_TRIGGER_PCT = 6.5            # Optuna v5_s2 best  # was: V4_COIN_TRIGGER_PCT (4.5)
+V5_CONL_TRIGGER_PCT = 6.5            # Optuna v5_s2 best  # was: V4_CONL_TRIGGER_PCT (4.5)
+V5_SPLIT_BUY_INTERVAL_MIN = 15      # Optuna v5_s2 best  # was: V4_SPLIT_BUY_INTERVAL_MIN (20)
 
 # ── v5 신규 파라미터 (초기값) ───────────────────────────────────
 V5_MAX_DAILY_TRADES_PER_STOCK = V4_MAX_DAILY_TRADES_PER_STOCK
-V5_ENTRY_CUTOFF_HOUR = 10            # 규칙서 표기 통일 (ET 10:00)
+V5_ENTRY_CUTOFF_HOUR = 12            # Optuna v5_s2 best  # was: 10
 V5_ENTRY_CUTOFF_MINUTE = 0
 V5_ENTRY_DEFAULT_START_HOUR = 8      # 기본 매수 시작 시간 (ET 08:00)
 V5_ENTRY_DEFAULT_START_MINUTE = 0
@@ -410,22 +410,22 @@ V5_CONDITIONAL_EXEMPT_CUTOFF = False
 
 # ── v5 횡보장 감지 파라미터 (초기값) ─────────────────────────────
 V5_SIDEWAYS_ENABLED = V4_SIDEWAYS_ENABLED
-V5_SIDEWAYS_MIN_SIGNALS = V4_SIDEWAYS_MIN_SIGNALS
+V5_SIDEWAYS_MIN_SIGNALS = 4          # Optuna v5_s2 best  # was: V4_SIDEWAYS_MIN_SIGNALS (3)
 V5_SIDEWAYS_EVAL_INTERVAL_MIN = V4_SIDEWAYS_EVAL_INTERVAL_MIN
-V5_SIDEWAYS_POLY_LOW = V4_SIDEWAYS_POLY_LOW
+V5_SIDEWAYS_POLY_LOW = 0.30          # Optuna v5_s2 best  # was: V4_SIDEWAYS_POLY_LOW (0.40)
 V5_SIDEWAYS_POLY_HIGH = V4_SIDEWAYS_POLY_HIGH
-V5_SIDEWAYS_GLD_THRESHOLD = V4_SIDEWAYS_GLD_THRESHOLD
+V5_SIDEWAYS_GLD_THRESHOLD = 0.1     # Optuna v5_s2 best  # was: V4_SIDEWAYS_GLD_THRESHOLD (0.3)
 V5_SIDEWAYS_GAP_FAIL_COUNT = V4_SIDEWAYS_GAP_FAIL_COUNT
 V5_SIDEWAYS_TRIGGER_FAIL_COUNT = V4_SIDEWAYS_TRIGGER_FAIL_COUNT
-V5_SIDEWAYS_INDEX_THRESHOLD = V4_SIDEWAYS_INDEX_THRESHOLD
+V5_SIDEWAYS_INDEX_THRESHOLD = 0.7   # Optuna v5_s2 best  # was: V4_SIDEWAYS_INDEX_THRESHOLD (0.5)
 
 # ── v5 서킷브레이커 (문서 기준 기본값) ───────────────────────────
 V5_CB_VIX_SPIKE_PCT = V4_CB_VIX_SPIKE_PCT
 V5_CB_VIX_COOLDOWN_DAYS = V4_CB_VIX_COOLDOWN_DAYS
-V5_CB_GLD_SPIKE_PCT = V4_CB_GLD_SPIKE_PCT
+V5_CB_GLD_SPIKE_PCT = 3.5            # Optuna v5_s2 best  # was: V4_CB_GLD_SPIKE_PCT (3.0)
 V5_CB_GLD_COOLDOWN_DAYS = V4_CB_GLD_COOLDOWN_DAYS
-V5_CB_BTC_CRASH_PCT = V4_CB_BTC_CRASH_PCT
-V5_CB_BTC_SURGE_PCT = V4_CB_BTC_SURGE_PCT
+V5_CB_BTC_CRASH_PCT = -4.5           # Optuna v5_s2 best  # was: V4_CB_BTC_CRASH_PCT (-6.0)
+V5_CB_BTC_SURGE_PCT = 4.0            # Optuna v5_s2 best  # was: V4_CB_BTC_SURGE_PCT (13.5)
 V5_CB_RATE_HIKE_PROB_PCT = V4_CB_RATE_HIKE_PROB_PCT
 V5_CB_OVERHEAT_PCT = V4_CB_OVERHEAT_PCT
 V5_CB_OVERHEAT_RECOVERY_PCT = V4_CB_OVERHEAT_RECOVERY_PCT

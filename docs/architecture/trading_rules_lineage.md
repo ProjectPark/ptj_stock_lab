@@ -1,6 +1,6 @@
 # Trading Rules 문서 계보 (Lineage)
 
-> 작성일: 2026-02-21 | 최종 갱신: 2026-02-25
+> 작성일: 2026-02-21 | 최종 갱신: 2026-03-01
 > 목적: 모든 매매 규칙/전략 문서의 전체 목록과 관계를 한곳에 정리하여 꼬이지 않게 관리
 
 ---
@@ -218,7 +218,7 @@
 |---|---|---|
 | `trading_rules_attach_v1.md` | D2S R1~R16, 953건 통계 분석 | 완료 |
 | `trading_rules_attach_v2.md` | R17 V-바운스, R18 조기 손절, DCA 강화 | 완료 |
-| `trading_rules_attach_v3.md` | 레짐 감지(R20/R21) + BB 하드 필터(R19) + Optuna #449 전체 | 완료 (Study 6~9B 검증) |
+| `trading_rules_attach_v3.md` | 레짐 감지(R20/R21) + BB 하드 필터(R19) + Optuna #449 전체 | ✅ 완료 (Study 5~9B 전체 재실행, 2026-03-01 최신화) |
 
 ### C-3b. 관련 리포트
 
@@ -307,3 +307,4 @@ docs/notes/ (아이디어) → docs/rules/ (확정) → simulation/strategies/ (
 | 2026-02-23 | 4-line 리팩터링 — docs/ + code/ 전면 재편, jab_seth 삭제, notes→rules→code 거버넌스 |
 | 2026-02-25 | LineC attach v3 추가 — 레짐 감지(R19~R21) + Optuna #449 + Study 6~9B 검증 |
 | 2026-02-27 | LineB VNQ v2 승격 — MT_VNQ8~13 통합 반영, P-NEW-28까지 전원 해결, notes→rules 이관 |
+| 2026-03-01 | LineC attach v3 재실행 & 최신화 — Study 5(레짐 Phase 1/2/3) + Optuna #449 + Study 6~9B 전체 SLURM 재실행 (JOBs 160~172), 문서 전면 갱신 |

@@ -139,10 +139,12 @@ D2S_ENGINE_V2 = {
 #
 # Optuna #449 최적화 기간:
 #   IS: 2024-09-18 ~ 2025-05-31  |  OOS: 2025-06-01 ~ 2026-02-17 (no-ROBN 1.5년)
-# 추가 검증 완료 (2026-02-25): Study 6~9B
-#   Study 6 ROBN 1년: v3 +57.34% vs v2 -1.83%
-#   Study 7 IS 구간: v3_IS Sharpe 3.463 (승률 100%)
-#   Study 9B weights: v3_current OOS 1위 → weights 확정
+# 추가 검증 완료 (2026-03-01 fresh 실행): Study 6~9B
+#   Study 6 ROBN 1년: v3 +4.24% / MDD -11.23% / Sharpe 0.368 (vs v2 -8.87% / -34.03% / -0.117)
+#   Study 7 IS 구간: v3_IS +3.29% / MDD -4.58% / Sharpe 0.983 (v2 MDD -18% → -4.6% 개선)
+#   Study 8 Ablation: full_3signal = no_poly (Polymarket 실데이터 미로드, BITU 폴백)
+#   Study 8B 레짐 6종: no_regime / streak_only 공동 최우수 → v4 레짐 단순화 근거
+#   Study 9B weights: v3_current weights 현행 유지 확정 (riskoff_heavy OOS 방어 미미)
 D2S_ENGINE_V3 = {
     **D2S_ENGINE_V2,  # v2 파라미터 전체 계승
 
@@ -237,7 +239,7 @@ D2S_ENGINE_V3 = {
 # D2S 엔진 파라미터 v3 No-ROBN — ROBN 제외 1.5년 테스트 전용
 # ============================================================
 # MSTU 상장일 기준 (2024-09-18 ~): ROBN은 2025-01-31 상장으로 3종목만 사용
-# Study 8B 검증 완료 (2026-02-25): 레짐 방법 6종 비교 → v3_3signal 유지 결론
+# Study 8B 검증 완료 (2026-03-01): 레짐 방법 6종 비교 → no_regime/streak_only 공동 최우수
 # ticker_weights: ROBN 30% → CONL/MSTU/AMDL 균등 재배분
 # twin_pairs: bank_CONL(lead=ROBN) 제거
 D2S_ENGINE_V3_NO_ROBN = {

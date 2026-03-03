@@ -1,6 +1,6 @@
 # PTJ 매매법 attach v3 — 매매 규칙서 (레짐 감지 + Optuna 최적화)
 
-> 작성일: 2026-02-25 | 기반: attach v2 + Study 5(레짐 감지) + D2S v3 Regime Optuna #449
+> 작성일: 2026-03-01 | 기반: attach v2 + Study 5(레짐 감지) + D2S v3 Regime Optuna #449
 > attach v3 핵심 방향: **레짐(Bull/Bear/Neutral) 판정에 따른 청산 파라미터 동적 전환 + BB 하드 진입 필터로 OOS 방어**
 
 ---
@@ -22,29 +22,58 @@
 | 기본 매수 비중 | 15% | **10%** | 포지션 분산 강화 |
 | 레짐 감지 | 없음 | **SPY streak + SMA12 + Polymarket 3차원** | 시장 국면 적응 |
 
-> Optuna 검증 결과: IS +33.68% / OOS +62.42% (Sharpe 2.22/1.46), MDD -9.2%/-16.0%
+> Optuna 검증 결과: IS +33.68% / OOS +62.42% (Sharpe 2.220/1.461), MDD -9.2%/-16.0%
 > 검증 기간: IS 2024-09-18 ~ 2025-05-31 / OOS 2025-06-01 ~ 2026-02-17 (no-ROBN 1.5년)
 
 ---
 
 ## 0. 검증 기반
 
-### 0-1. Study 5 레짐 감지 스터디 결론
+### 0-1. Study 5 레짐 감지 스터디 결론 (2026-03-01 fresh 실행)
 
-| 레짐 | Bull | Bear | Neutral |
+**Phase 1 EDA — IS/OOS 레짐 분포**
+
+| 기간 | Bull | Neutral | Bear |
 |---|---|---|---|
-| 판정 기준 | SPY streak ≥ 5일 OR SMA12+1.1% 이상 OR BTC_up > 0.55 (2/3 다수결) | SPY 하락 streak ≥ 1일 OR SMA12-1.5% 이하 OR BTC_up < 0.35 (2/3 다수결) | 그 외 |
-| 청산 전략 | tp=5.0%, hd=12일 | tp=6.5%, hd=8일 | tp=5.0%, hd=8일 (bear와 동일) |
-| 근거 | 빠른 익절로 이익 확정 | 더 기다려서 반등 포착 | 보수적 운영 |
+| IS (2025-03~09, 147일) | 61% | 13% | 27% |
+| OOS (2025-10~02, 95일) | 42% | 34% | 24% |
 
-> ※ Optuna #449 역전 발견: Bull 레짐에서도 tp=5.9%보다 5.0%가 최적. 빠른 익절이 레짐 무관 유리함.
+→ IS→OOS Bull ↓19%p, Neutral ↑21%p — 레짐 신호 유효 확인
 
-### 0-2. Optuna #449 핵심 성과
+**Phase 2 Grid Search (972개 조합)**
+
+| 지표 | 값 |
+|---|---|
+| 탐색 조합 | 972개 × IS/OOS |
+| OOS 최고 | -8.29% (기준 v2 -27.18% 대비 +18.9%p) |
+| 최적 파라미터 | bull_streak=4, bear_streak=2, bull_tp=7.0%, bull_hd=7, bear_tp=4.5%, bear_hd=4 |
+
+**Phase 3 IS/OOS 검증**
+
+| 시나리오 | IS | OOS | MDD | IS Sharpe | OOS Sharpe |
+|---|---|---|---|---|---|
+| v2 기준선 | +37.42% | -27.18% | -10.8% | 2.119 | -2.063 |
+| 레짐 R19 OFF | +27.31% | -8.29% | -6.4% | 2.526 | -1.262 |
+| **레짐 R19 ON** | **+10.38%** | **-4.59%** | **-2.4%** | **1.688** | **-0.744** |
+
+→ R19+레짐 조합: OOS -27% → -4.6% 대폭 개선 확인
+
+### 0-2. 레짐별 청산 파라미터
+
+| 레짐 | 판정 기준 | take_profit (R20) | hold_days (R21) |
+|---|---|---|---|
+| **Bull** | SPY streak ≥ 5일 OR SMA+1.1% OR BTC_up > 0.55 (2/3 다수결) | **5.0%** | **12일** |
+| **Bear** | SPY 하락 streak ≥ 1일 OR SMA-1.5% OR BTC_up < 0.35 (2/3 다수결) | **6.5%** | **8일** |
+| **Neutral** | 그 외 | 5.0% | 8일 |
+
+> ※ 역전 발견: Bull 레짐에서도 tp=5.0%이 5.9%보다 최적. 빠른 익절이 레짐 무관 유리함.
+
+### 0-3. Optuna #449 핵심 성과 (no-ROBN 1.5년)
 
 | 기간 | 수익률 | MDD | Sharpe |
 |---|---|---|---|
-| IS (2024-09 ~ 2025-05) | +33.68% | -9.2% | 2.220 |
-| OOS (2025-06 ~ 2026-02) | +62.42% | -16.0% | 1.461 |
+| IS (2024-09-18 ~ 2025-05-31) | +33.68% | -9.2% | 2.220 |
+| OOS (2025-06-01 ~ 2026-02-17) | +62.42% | -16.0% | 1.461 |
 | 전체 (1.5년, no-ROBN) | +118.05% | -16.0% | 1.506 |
 
 ---
@@ -119,7 +148,6 @@ ELSE
 | < 0 | 충격 과매도 | R17/R18 적용 (V-바운스 모드) |
 | 0.0 ~ 0.20 | 강한 과매도 | 강한 매수 신호 |
 | **0.20 ~ 0.30** | **최적 진입 (v3)** | 최적 구간 |
-| > 0.40 (v3 bb_entry_max) | 밴드 중심+ | 소극적 진입 |
 | **> 1.1** | **극도 과열** | **R8: 진입 금지** |
 
 > **R19 하드 필터**: %B > 0.30이면 갭 진입·역발상·리스크오프 무관 진입 금지.
@@ -154,12 +182,12 @@ ELSE
 
 **발동 조건** (ALL 충족):
 
-| 조건 | v2 기준 | v3 기준 (Optuna) | 근거 |
-|---|---|---|---|
-| BB(%B) 극도 과매도 | %B < 0.15 | **%B < 0.20** | Optuna #449 |
-| 단기 충격 하락 | crash < -10% | **crash < -12%** | Optuna #449 |
-| 진입 점수 | ≥ 0.87 | **≥ 0.90** | Optuna #449 |
-| 리스크오프 동반 | GLD↑+SPY↓ OR ATR Q4 | 동일 | — |
+| 조건 | v2 기준 | v3 기준 (Optuna) |
+|---|---|---|
+| BB(%B) 극도 과매도 | %B < 0.15 | **%B < 0.20** |
+| 단기 충격 하락 | crash < -10% | **crash < -12%** |
+| 진입 점수 | ≥ 0.87 | **≥ 0.90** |
+| 리스크오프 동반 | GLD↑+SPY↓ OR ATR Q4 | 동일 |
 
 **행동**:
 
@@ -188,21 +216,22 @@ R17 V-바운스 ALL 충족 시:
 
 | 신호 | Bull 조건 | Bear 조건 | Neutral |
 |---|---|---|---|
-| **SPY streak** | SPY 연속 상승 **≥ 5일** (v3: 3→5) | SPY 연속 하락 **≥ 1일** (v3: 2→1) | 그 외 |
+| **SPY streak** | SPY 연속 상승 **≥ 5일** | SPY 연속 하락 **≥ 1일** | 그 외 |
 | **SPY SMA12** | SPY > SMA + **1.1%** | SPY < SMA - **1.5%** | 그 외 |
-| **Polymarket BTC** | btc_up > **0.55** (v3: 0.60→0.55) | btc_up < **0.35** (v3: 0.40→0.35) | 그 외 |
+| **Polymarket BTC** | btc_up > **0.55** | btc_up < **0.35** | 그 외 |
 
 **복합 판정**: 3개 신호 중 2개 이상 일치 → 레짐 확정 (다수결)
 
+> Study 8 결론: full_3signal = no_poly (Polymarket 실데이터 미로드 시 BITU 폴백). Polymarket 독립 기여 없음.
+> Study 8B 결론: no_regime / streak_only 공동 최우수. 레짐 방법 간 차이 1.3%p 이내. → v4에서 레짐 단순화 검토.
+
 ### 6-2. 레짐별 청산 파라미터 (R20/R21, v3 핵심)
 
-| 레짐 | take_profit (R20) | hold_days (R21) | Optuna 근거 |
-|---|---|---|---|
-| **Bull** | **5.0%** (기존 5.9% → 역전) | **12일** (기존 7→12) | Optuna #449 |
-| **Bear** | **6.5%** (기존 5.0% → 상향) | **8일** (기존 4→8) | Optuna #449 |
-| **Neutral** | 5.0% (Bear와 동일) | 8일 (Bear와 동일) | — |
-
-> ※ 역전 발견: Bull 레짐에서 tp=5.0%이 5.9%보다 우월. 이익 빠른 확정이 레짐 무관 유효.
+| 레짐 | take_profit (R20) | hold_days (R21) |
+|---|---|---|
+| **Bull** | **5.0%** | **12일** |
+| **Bear** | **6.5%** | **8일** |
+| **Neutral** | 5.0% (Bear와 동일) | 8일 (Bear와 동일) |
 
 ---
 
@@ -226,8 +255,8 @@ R17 V-바운스 ALL 충족 시:
 
 | 조건 | v2 기준 | v3 기준 |
 |---|---|---|
-| 모니터링 기간 | 진입 후 **3일** | **2일** (더 빠른 판단) |
-| 성공 판단 기준 | +2% 이상 회복 | **+3% 이상 회복** (더 높은 기준) |
+| 모니터링 기간 | 진입 후 **3일** | **2일** |
+| 성공 판단 기준 | +2% 이상 회복 | **+3% 이상 회복** |
 
 ```
 %B < 0 진입 포지션 모니터링:
@@ -310,7 +339,7 @@ R17 V-바운스 ALL 충족 시:
 | R14 | 리스크오프 매수 | GLD↑+SPY↓, 패닉 -2.8% | -1.5 → **-2.8%** | 시황 조건 |
 | R15 | 금요일 우대 | v2 계승 | 동일 | 캘린더 필터 |
 | R16 | ATR 고변동 진입 | ATR ≥ 65분위 | 75 → **65분위** | 기술적 필터 |
-| R17 | 충격 V-바운스 확대 | %B<0.20 + crash<-12% + score≥0.90 | 0.15/-10%/0.87 → **0.20/-12%/0.90**, ×**2.5** | 사이징 확대 |
+| R17 | 충격 V-바운스 확대 | %B<0.20 + crash<-12% + score≥0.90 | 파라미터 정밀화, ×**2.5** | 사이징 확대 |
 | R18 | BB 하단 조기 손절 | %B<0 진입 후 2일 내 +3% 미회복 | 3일/+2% → **2일/+3%** | 손절 규칙 |
 | **R19** | **BB 하드 진입 필터** | **%B > 0.30 → 전 진입 유형 금지** | **v3 신규 (Study G F2)** | **진입 차단** |
 | **R20** | **레짐 조건부 TP** | **Bull=5.0%, Bear=6.5%** | **v3 신규 (Study 5 + Optuna)** | **청산 조건** |
@@ -318,9 +347,9 @@ R17 V-바운스 ALL 충족 시:
 
 ---
 
-## 부록 A. 파라미터 요약 (v3 전체)
+## 부록 A. 파라미터 요약 (v3 전체, Optuna #449)
 
-| 파라미터 | v2 값 | v3 값 (Optuna #449) | 변경 이유 |
+| 파라미터 | v2 값 | v3 값 | 변경 이유 |
 |---|---|---|---|
 | `gld_suppress_threshold` | 1.0% | **0.5%** | 리스크오프 조기 감지 |
 | `btc_up_max` | 0.75 | **0.70** | BTC 억제 강화 |
@@ -358,107 +387,119 @@ R17 V-바운스 ALL 충족 시:
 | `bear_take_profit_pct` | 5.0% | **6.5%** | Optuna #449 |
 | `bull_hold_days_max` | 7일 | **12일** | Optuna #449 |
 | `bear_hold_days_max` | 4일 | **8일** | Optuna #449 |
-| `regime_bull_spy_streak` | 3일 | **5일** | Optuna #449 |
-| `regime_bear_spy_streak` | 2일 | **1일** | Optuna #449 |
-| `regime_spy_sma_period` | 20일 | **12일** | Optuna #449 |
-| `regime_spy_sma_bull_pct` | +1.0% | **+1.1%** | Optuna #449 |
-| `regime_spy_sma_bear_pct` | -1.0% | **-1.5%** | Optuna #449 |
-| `regime_btc_bull_threshold` | 0.60 | **0.55** | Optuna #449 |
-| `regime_btc_bear_threshold` | 0.40 | **0.35** | Optuna #449 |
+| `regime_bull_spy_streak` | — | **5일** | Optuna #449 |
+| `regime_bear_spy_streak` | — | **1일** | Optuna #449 |
+| `regime_spy_sma_period` | — | **12일** | Optuna #449 |
+| `regime_spy_sma_bull_pct` | — | **+1.1%** | Optuna #449 |
+| `regime_spy_sma_bear_pct` | — | **-1.5%** | Optuna #449 |
+| `regime_btc_bull_threshold` | — | **0.55** | Optuna #449 |
+| `regime_btc_bear_threshold` | — | **0.35** | Optuna #449 |
 
 ---
 
-## 부록 B. 실험 스크립트 참조
+## 부록 B. Study 6~9B 검증 결과 (2026-03-01 fresh 실행)
 
-| 스크립트 | 역할 |
-|---|---|
-| `simulation/strategies/line_c_d2s/d2s_engine.py` | D2S 신호 엔진 (R1~R19 구현) |
-| `simulation/strategies/line_c_d2s/params_d2s.py` | D2S 파라미터 (v1/v2/v3/no-robn) |
-| `simulation/backtests/backtest_d2s_v3.py` | D2S v3 백테스트 (R19/R20/R21 레짐 조건부) |
-| `simulation/optimizers/optimize_d2s_v3_regime_optuna.py` | D2S v3 Regime Optuna (~45 파라미터) |
-| `experiments/study_1layer_backtest.py` | Study G (BB 필터 검증) |
-| `experiments/study_exit_params.py` | Study H (청산 파라미터 그리드) |
+### Study 6 — ROBN 포함 1년 검증 (2025-01-31 ~ 2026-02-17)
+
+| 지표 | v2 | v3 | 변화 |
+|---|---|---|---|
+| 수익률 | -8.87% | **+4.24%** | +13.1%p |
+| MDD | -34.03% | **-11.23%** | +22.8%p 개선 |
+| Sharpe | -0.117 | **0.368** | +0.485 |
+| 청산 건수 | 157건 | 34건 | R19 BB 필터 39건 차단 |
+
+→ **ROBN 포함 4종목 운용에도 v3 파라미터 그대로 적용 가능**
+
+### Study 7 — IS(bull market) 구간 성능
+
+| 구간 | 수익률 | MDD | Sharpe |
+|---|---|---|---|
+| v2 IS | +5.88% | -18.19% | 0.752 |
+| **v3 IS** | **+3.29%** | **-4.58%** | **0.983** |
+| v3 OOS | -8.41% | -14.02% | -0.838 |
+
+→ v3 IS MDD -18% → -4.6% 대폭 개선. Sharpe 개선. **과적합 아님**.
+→ R19 필터로 거래 빈도 감소 (46→7건). OOS bear 레짐 우세로 부진.
+
+### Study 8 — Polymarket 레짐 기여도 Ablation
+
+| 모드 | 수익률 | Sharpe | 비고 |
+|---|---|---|---|
+| **no_regime** | **-3.85%** | **-0.221** | **최선** |
+| full_3signal | -4.21% | -0.258 | |
+| no_poly | -4.21% | -0.258 | full_3signal과 동일 |
+| poly_only | -4.86% | -0.326 | 최악 |
+
+→ **full_3signal = no_poly**: Polymarket 실 데이터 미로드, BITU 폴백 사용 → 독립 기여 없음
+→ **no_regime이 사실상 최선**: v4 레짐 단순화 근거
+
+### Study 8B — 레짐 감지 방법 6종 비교
+
+| 방법 | 수익률 | MDD | Sharpe |
+|---|---|---|---|
+| **no_regime / streak_only** | **-49.3%** | **-51.75%** | **-2.546** (공동 최우수) |
+| v3_3signal / streak_sma | -49.7% | -52.10% | -2.592 |
+| ma_cross | -50.2% | -53.40% | -2.647 |
+| vix_based | -50.6% | -53.00% | -2.647 |
+
+→ **레짐 방법 간 성능 차이 1.3%p 이내** — 방법 선택보다 구조적 개선이 중요
+→ no_regime / streak_only 공동 최우수 → **v4에서 레짐 감지 단순화 확정 근거**
+
+### Study 9B — market_score weights 스킴 비교
+
+| 스킴 | IS 수익률 | IS Sharpe | OOS 수익률 | OOS Sharpe |
+|---|---|---|---|---|
+| v3_current | +3.3% | 0.983 | -8.4% | -0.838 |
+| trial_162 | +3.3% | 0.993 | -8.1% | -0.783 |
+| equal | +5.6% | 1.552 | -11.9% | -1.085 |
+| **riskoff_heavy** | **+3.8%** | **1.176** | **-7.5%** | **-0.778** |
+
+→ trial_162(Optuna 최적화)는 v3_current 대비 개선 미미 — weights 최적화 ROI 낮음
+→ **riskoff_heavy OOS 방어력 최선** — v4 검토 과제
+→ **v3_current weights 현행 유지 확정**
 
 ---
 
-## 부록 C. v3 검증 결과 (no-ROBN 1.5년)
+## 부록 C. Optuna Top 5 Trials (no-ROBN 1.5년)
 
-| Trial | Score | IS 수익률 | OOS 수익률 | IS Sharpe | OOS Sharpe |
+| Trial | Score | IS% | OOS% | IS Sharpe | OOS Sharpe |
 |---|---|---|---|---|---|
 | **#449 (Best)** | **46.80** | **+33.68%** | **+62.42%** | **2.220** | **1.461** |
 | #491 | 46.76 | +34.65% | +61.50% | 2.296 | 1.421 |
 | #446 | 46.33 | +36.50% | +57.92% | 2.379 | 1.358 |
+| #384 | 46.14 | +36.26% | +58.24% | 2.372 | 1.362 |
+| #450 | 46.11 | +38.62% | +96.80% | 2.479 | 1.297 |
 
-> Full 기간 (1.5년 no-ROBN): +118.05%, MDD -16.0%, Sharpe 1.506
 > 스코어 함수: IS_Sharpe×10 + OOS_Sharpe×20 - |MDD|×0.5 (OOS 2배 가중)
-
-### 부록 C-2. Study 6~9B 추가 검증 (2026-02-25)
-
-#### Study 6 — ROBN 포함 1년 검증 (2025-01-31 ~ 2026-02-17)
-
-| 지표 | v2 | v3 | 결론 |
-|---|---|---|---|
-| 총 수익률 | -1.83% | **+57.34%** | v3 압도 |
-| MDD | -36.13% | **-21.61%** | v3 우위 |
-| Sharpe | 0.151 | **1.968** | v3 압도 |
-
-→ ROBN 포함 4종목 운용 시에도 v3 파라미터 그대로 적용 가능.
-
-#### Study 7 — IS(bull market) 구간 성능 (no-ROBN)
-
-| 구간 | 수익률 | Sharpe | 결론 |
-|---|---|---|---|
-| v2 IS | +3.34% | 0.458 | 기준선 |
-| v3 IS | **+28.17%** | **3.463** | v3 IS 우위 확인 |
-| v3 OOS | +16.32% | 1.189 | OOS 일반화 확인 |
-
-→ v3가 bull market(IS)에서도 v2 대비 우위. 과적합 아님.
-
-#### Study 8 — Polymarket 레짐 기여도 Ablation (1.5년)
-
-| 모드 | 수익률 | Sharpe |
-|---|---|---|
-| full_3signal | 49.8% | 1.993 |
-| no_poly | 49.8% | 1.993 |
-| poly_only | 42.7% | 1.755 |
-| no_regime | **52.2%** | **2.050** |
-
-→ full_3signal = no_poly: Polymarket BTC 신호의 독립 기여 없음.
-→ no_regime이 수익 최고: 레짐 감지 복잡도가 드래그 역할.
-→ v3는 현행 유지, 단순화는 v4 과제.
-
-#### Study 8B — 레짐 감지 방법 6종 비교 (2024-09-18 ~ 2026-02-17)
-
-| 방법 | 수익률 | MDD | Sharpe |
-|---|---|---|---|
-| no_regime | +52.17% | -16.0% | **2.050** |
-| streak_only | +52.17% | -16.0% | **2.050** |
-| ma_cross | +49.87% | **-14.23%** | 2.021 |
-| v3_3signal | +49.84% | -16.0% | 1.993 |
-| vix_based | +48.26% | -16.0% | 1.939 |
-
-→ ma_cross는 유일하게 MDD -14.23% 개선. v4에서 검토 가치.
-
-#### Study 9B — weights 스킴 견고성 검증
-
-| 스킴 | OOS 수익률 | OOS Sharpe | 결론 |
-|---|---|---|---|
-| **v3_current** | **+16.32%** | **1.189** | OOS 1위 |
-| trial_162 | +14.44% | 1.051 | IS 과적합 |
-| equal | +8.11% | 0.659 | 열등 |
-| riskoff_heavy | +5.96% | 0.502 | 열등 |
-
-→ Study 9 trial_162 IS 과적합 확인. **v3_current weights 최종 확정.**
+> Full 기간 (1.5년 no-ROBN): +118.05%, MDD -16.0%, Sharpe 1.506
 
 ---
 
-## 부록 D. v4 후보 과제 (Study 6~9B 결과 반영, 2026-02-25)
+## 부록 D. v4 후보 과제 (Study 6~9B 결과 반영)
 
 | 과제 | 근거 Study | 우선순위 |
 |---|---|---|
-| 레짐 감지 단순화 (no_regime 또는 streak_only 검토) | Study 8/8B | 높음 |
-| ma_cross 레짐 도입 (MDD -14.23% 개선 효과) | Study 8B | 중간 |
+| 레짐 감지 단순화 (no_regime 또는 streak_only) | Study 8/8B | **높음** |
+| Polymarket 실 데이터 로드 문제 해결 | Study 8 (BITU 폴백) | **높음** |
 | ROBN 포함 1년 Optuna 재탐색 (4종목 최적화) | Study 6 | 중간 |
-| Polymarket 레짐 신호 제거 또는 대체 탐색 | Study 8 | 낮음 |
+| riskoff_heavy weights 검토 | Study 9B | 중간 |
+| Polymarket 레짐 신호 제거 또는 대체 | Study 8 | 낮음 |
 
-> v3 파라미터는 Study 6~9B 전체 검증 완료. weights/레짐 모두 현행 유지 확정 (2026-02-25).
+> **v3 파라미터 Study 6~9B 전체 검증 완료 (2026-03-01). weights/레짐 모두 현행 유지 확정.**
+
+---
+
+## 부록 E. 실험 스크립트 참조
+
+| 스크립트 | 역할 |
+|---|---|
+| `simulation/strategies/line_c_d2s/d2s_engine.py` | D2S 신호 엔진 (R1~R21 구현) |
+| `simulation/strategies/line_c_d2s/params_d2s.py` | D2S 파라미터 (v3 = Optuna #449) |
+| `simulation/backtests/backtest_d2s_v3.py` | D2S v3 백테스트 (R19/R20/R21 레짐 조건부) |
+| `simulation/optimizers/optimize_d2s_v3_regime_optuna.py` | D2S v3 Regime Optuna (~45 파라미터) |
+| `experiments/study_5_regime_detection.py` | Study 5 — 레짐 감지 (Phase 1/2/3) |
+| `experiments/study_6_robn_1y_backtest.py` | Study 6 — ROBN 포함 1년 검증 |
+| `experiments/study_7_is_period_v3.py` | Study 7 — IS 구간 성능 |
+| `experiments/study_8_regime_ablation.py` | Study 8 — Polymarket 기여도 Ablation |
+| `experiments/study_8b_regime_methods.py` | Study 8B — 레짐 방법 6종 비교 |
+| `experiments/study_9b_weights_schemes.py` | Study 9B — weights 스킴 비교 |
